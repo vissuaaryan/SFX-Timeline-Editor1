@@ -34,6 +34,8 @@ import androidx.media3.ui.PlayerView
 import java.io.File
 import java.io.FileInputStream
 
+fun displayName(ctx:android.content.Context,u:Uri):String=ctx.contentResolver.query(u,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)else u.lastPathSegment?:"file"}?:u.lastPathSegment?:"file"
+
 class MainActivity:ComponentActivity(){ override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);setContent{SfxApp()}} }
 
 @kotlin.OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
@@ -92,5 +94,3 @@ class MainActivity:ComponentActivity(){ override fun onCreate(savedInstanceState
      ).forEach { (key, label) ->
       NavigationBarItem(
        selected = page == key,
-       onClick = { page = key },
-       icon = {
