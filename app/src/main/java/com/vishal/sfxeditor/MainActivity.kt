@@ -41,25 +41,7 @@ fun copyText(ctx:android.content.Context,s:String){val c=ctx.getSystemService(an
 @Composable fun AssetCard(a:AssetSlot,onPick:()->Unit){val ctx=androidx.compose.ui.platform.LocalContext.current;Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF18232C))){Column(Modifier.fillMaxWidth().padding(10.dp)){Row(verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.AudioFile,null,tint=Color(0xFF69E7B9));Spacer(Modifier.width(8.dp));Column(Modifier.weight(1f)){Text(a.filename,color=Color.White,fontSize=12.sp,fontWeight=FontWeight.Bold);Text("${a.id} · ${a.type}",color=Color.LightGray,fontSize=10.sp)};Text(if(a.uri!=null)"ADDED" else "MISSING",color=if(a.uri!=null)Color(0xFF69E7B9)else Color(0xFFFFC46B),fontSize=10.sp)};Row(verticalAlignment=Alignment.CenterVertically){TextButton(onClick={copyText(ctx,a.filename)}){Icon(Icons.Default.ContentCopy,null);Text("Copy Name")};TextButton(onClick={copyText(ctx,a.id)}){Text("Copy ID")};Spacer(Modifier.weight(1f));TextButton(onClick=onPick){Text(if(a.uri!=null)"Replace" else "Upload")}};if(a.searchPhrase.isNotBlank())Text("Search: ${a.searchPhrase}",color=Color.LightGray,fontSize=10.sp);if(a.sourceName.isNotBlank())Text("Source: ${a.sourceName}",color=Color(0xFF80CFFF),fontSize=10.sp);if(a.sourceUrl.startsWith("https://")||a.sourceUrl.startsWith("http://")){TextButton(onClick={try{ctx.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(a.sourceUrl)))}catch(_:Exception){copyText(ctx,a.sourceUrl)}}){Text("Open Source Link")}}}}}
 
 @OptIn(UnstableApi::class)
-@Composable fun TimelinePage(
-    mod: Modifier,
-    ctx: android.content.Context,
-    project: SfxProject?,
-    video: Uri?,
-    videoName: String,
-    assets: List<AssetSlot>,
-    events: List<AudioEvent>,
-    onEvents: (List<AudioEvent>) -> Unit,
-    onVideo: () -> Unit,
-    onBulk: () -> Unit,
-    onPick: (String) -> Unit,
-    exporting: Boolean,
-    progress: Float,
-    onExport: () -> Unit,
-    activeSavedId: String?,
-    onSaveProject: () -> Unit,
-    status: String
-) {
+@Composable fun TimelinePage(mod:Modifier,ctx:android.content.Context,project:SfxProject?,video:Uri?,videoName:String,assets:List<AssetSlot>,events:List<AudioEvent>,onEvents:(List<AudioEvent>)->Unit,onVideo:()->Unit,onBulk:()->Unit,onPick:(String)->Unit,exporting:Boolean,progress:Float,onExport:()->Unit,activeSavedId:String?,onSaveProject:()->Unit,status:String){
  val player=remember(video){if(video==null)null else ExoPlayer.Builder(ctx).build().apply{setMediaItem(MediaItem.fromUri(video));prepare()}};DisposableEffect(player){onDispose{player?.release()}}
  LazyColumn(mod.fillMaxSize().padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
   item{Text("TIMELINE & EXPORT",color=Color.White,fontSize=23.sp,fontWeight=FontWeight.Bold);if(player!=null)AndroidView(factory={PlayerView(it).apply{this.player=player;useController=true}},update={it.player=player},modifier=Modifier.fillMaxWidth().height(210.dp))else OutlinedButton(onClick=onVideo,modifier=Modifier.fillMaxWidth()){Text("Select Video")};Text(videoName,color=Color.LightGray,fontSize=11.sp)}
@@ -68,7 +50,7 @@ fun copyText(ctx:android.content.Context,s:String){val c=ctx.getSystemService(an
    items(assets){AssetCard(it){onPick(it.id)}}
    if(project!=null){item{Text("TIMELINE EVENTS",color=Color(0xFF69E7B9),fontWeight=FontWeight.Bold)}}
    items(events){e->Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF18232C))){Column(Modifier.padding(12.dp)){Text("${e.id} · ${assets.firstOrNull{it.id==e.assetId}?.filename?:e.assetId}",color=Color.White,fontWeight=FontWeight.Bold,fontSize=12.sp);Text("${e.startMs}ms → ${e.endMs}ms · Layer ${e.layer}",color=Color.LightGray,fontSize=11.sp);Text(e.visualAction.ifBlank{e.reason},color=Color.Gray,fontSize=10.sp);Row(verticalAlignment=Alignment.CenterVertically){Text("Volume",color=Color.LightGray,fontSize=11.sp);Slider(e.volume,{v->onEvents(events.map{if(it.id==e.id)it.copy(volume=v)else it})},modifier=Modifier.weight(1f));Text("${(e.volume*100).toInt()}%",color=Color.White,fontSize=10.sp)}}}}
-   if(project!=null)item{Button(onClick = onSaveProject, modifier = Modifier.fillMaxWidth()){Icon(Icons.Default.Save,null);Text(if(activeSavedId==null)"Save Project" else "Update Saved Project")};val missing=assets.count{it.required&&it.uri==null};Text("Required assets missing: $missing",color=if(missing==0)Color(0xFF69E7B9)else Color(0xFFFFC46B));Button(onClick=onExport,enabled=video!=null&&missing==0&&!exporting,modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.Movie,null);Text("Render Final MP4")};if(exporting)LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth())}
+   if(project!=null)item{Button(onClick=onSaveProject,modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.Save,null);Text(if(activeSavedId==null)"Save Project" else "Update Saved Project")};val missing=assets.count{it.required&&it.uri==null};Text("Required assets missing: $missing",color=if(missing==0)Color(0xFF69E7B9)else Color(0xFFFFC46B));Button(onClick=onExport,enabled=video!=null&&missing==0&&!exporting,modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.Movie,null);Text("Render Final MP4")};if(exporting)LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth())}
    item{Text(status,color=Color.LightGray,fontSize=11.sp);Text("Renderer uses AndroidX Media3 Composition to mix the source video and synchronized audio sequences. Crossfades between tracks are not supported by Media3 Composition; fade envelopes on individual clips are applied.",color=Color.Gray,fontSize=10.sp)}
  }
 }
