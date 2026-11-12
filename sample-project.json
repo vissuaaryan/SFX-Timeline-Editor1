@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "project": {"project_name": "Sample Motion Graphics", "video_filename": "source.mp4", "video_duration_ms": 12000, "fps": 30, "resolution": "1080x1920", "language": "Hindi", "sound_style": "premium_cinematic"},
+  "analysis": {"video_analyzed": true, "script_analyzed": true, "frame_inspection_available": true, "timing_method": "frame_based", "limitations": []},
+  "audio_settings": {"preserve_original_audio": true, "sample_rate": 48000, "master_volume": 1.0, "target_lufs": -14, "true_peak_db": -1},
+  "assets": [
+    {"id": "SFX_001", "filename": "SFX_001_DEEP_WHOOSH.wav", "type": "sfx", "category": "whoosh", "description": "Deep cinematic whoosh", "required": true, "suggested_duration_ms": 1000, "generation_prompt": "Premium deep cinematic whoosh, clean transient, no music", "visual_reason": "Opening visual reveal"},
+    {"id": "SFX_002", "filename": "SFX_002_CINEMATIC_HIT.wav", "type": "sfx", "category": "impact", "description": "Restrained cinematic impact", "required": true, "suggested_duration_ms": 900, "generation_prompt": "Controlled low-mid cinematic impact, no distortion", "visual_reason": "Main title impact"}
+  ],
+  "timeline": [
+    {"event_id": "EVENT_001", "asset_id": "SFX_001", "start_ms": 500, "end_ms": 1500, "duration_ms": 1000, "source_frame": 15, "layer": 1, "volume": 0.7, "fade_in_ms": 100, "fade_out_ms": 200, "pan": 0.0, "priority": "medium", "ducking_enabled": false, "visual_action": "Opening reveal", "reason": "Support the opening reveal"},
+    {"event_id": "EVENT_002", "asset_id": "SFX_002", "start_ms": 4000, "end_ms": 4900, "duration_ms": 900, "source_frame": 120, "layer": 2, "volume": 0.85, "fade_in_ms": 0, "fade_out_ms": 250, "pan": 0.0, "priority": "high", "ducking_enabled": false, "visual_action": "Title impact", "reason": "Emphasize the title reveal"}
+  ],
+  "mixing": {"music_ducking": false, "prevent_clipping": true, "normalization": "measured_loudness", "master_fade_out_ms": 500},
+  "validation": {"all_asset_references_valid": true, "timestamps_within_video": true, "duplicate_ids": false, "json_valid": true, "warnings": []}
+}

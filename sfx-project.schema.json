@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SFX Timeline Editor Project",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project",
+    "assets",
+    "timeline"
+  ],
+  "properties": {
+    "schema_version": {
+      "enum": [
+        "1.0",
+        "1.1"
+      ]
+    },
+    "project": {
+      "type": "object",
+      "required": [
+        "project_name",
+        "video_duration_ms",
+        "fps"
+      ],
+      "properties": {
+        "project_name": {
+          "type": "string"
+        },
+        "video_filename": {
+          "type": "string"
+        },
+        "video_duration_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fps": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "resolution": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "sound_style": {
+          "type": "string"
+        }
+      }
+    },
+    "audio_settings": {
+      "type": "object",
+      "properties": {
+        "preserve_original_audio": {
+          "type": "boolean"
+        },
+        "sample_rate": {
+          "type": "integer"
+        },
+        "master_volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "filename"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "suggested_duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "generation_prompt": {
+            "type": "string"
+          },
+          "search_phrase": {
+            "type": "string"
+          },
+          "source_name": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "visual_reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "asset_id",
+          "start_ms",
+          "end_ms"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "asset_id": {
+            "type": "string"
+          },
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source_frame": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "layer": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "volume": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "fade_in_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fade_out_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pan": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1
+          },
+          "visual_action": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "timing_confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object"
+    },
+    "mixing": {
+      "type": "object"
+    },
+    "validation": {
+      "type": "object"
+    }
+  }
+}
