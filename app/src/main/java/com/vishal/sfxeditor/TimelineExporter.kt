@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.audio.DefaultGainProvider
@@ -109,7 +110,7 @@ class TimelineExporter(private val context: Context) {
                         )
                     }
 
-                    val audioProcessors = mutableListOf(
+                    val audioProcessors = mutableListOf<AudioProcessor>(
                         GainProcessor(gainBuilder.build())
                     )
                     if (event.pan != 0f) {
