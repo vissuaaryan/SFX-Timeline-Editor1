@@ -24,6 +24,10 @@ object ProjectLibrary {
     fun load(context: Context): List<SavedProject> =
         loadAll(context).filterNot { it.id == ProjectRecoveryManager.RECOVERY_ID }
 
+    /** Read only the reserved crash-recovery checkpoint. */
+    fun loadRecoveryCheckpoint(context: Context): SavedProject? =
+        loadAll(context).firstOrNull { it.id == ProjectRecoveryManager.RECOVERY_ID }
+
     /** Internal complete list including the recovery checkpoint. */
     private fun loadAll(context: Context): List<SavedProject> {
         return try {
