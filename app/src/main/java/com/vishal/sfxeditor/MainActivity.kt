@@ -92,6 +92,8 @@ fun SfxApp() {
     }
 
     var activeSavedId by remember { mutableStateOf<String?>(null) }
+    var renameTarget by remember { mutableStateOf<SavedProject?>(null) }
+    var renameValue by remember { mutableStateOf("") }
     var video by remember { mutableStateOf<Uri?>(null) }
     var videoName by remember { mutableStateOf("No video selected") }
 
@@ -596,37 +598,47 @@ fun SfxApp() {
                                         Row(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-
                                             Button(
+                                                onClick = { openSavedProject(saved) },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Default.Edit, contentDescription = null)
+                                                Text("Open / Edit")
+                                            }
+                                            OutlinedButton(
                                                 onClick = {
-                                                    openSavedProject(saved)
+                                                    renameTarget = saved
+                                                    renameValue = saved.name
                                                 },
                                                 modifier = Modifier.weight(1f)
                                             ) {
-                                                Icon(
-                                                    Icons.Default.Edit,
-                                                    contentDescription = null
-                                                )
-                                                Text("Open / Edit")
+                                                Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null)
+                                                Text("Rename")
                                             }
+                                        }
 
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val duplicate = ProjectLibrary.duplicate(ctx, saved.id)
+                                                    savedProjects = ProjectLibrary.load(ctx)
+                                                    status = if (duplicate != null) "Project duplicated" else "Could not duplicate project"
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = null)
+                                                Text("Duplicate")
+                                            }
                                             OutlinedButton(
                                                 onClick = {
                                                     ProjectLibrary.delete(ctx, saved.id)
                                                     savedProjects = ProjectLibrary.load(ctx)
-
-                                                    if (activeSavedId == saved.id) {
-                                                        activeSavedId = null
-                                                    }
-
+                                                    if (activeSavedId == saved.id) activeSavedId = null
                                                     status = "Project deleted"
                                                 },
                                                 modifier = Modifier.weight(1f)
                                             ) {
-                                                Icon(
-                                                    Icons.Default.Delete,
-                                                    contentDescription = null
-                                                )
+                                                Icon(Icons.Default.Delete, contentDescription = null)
                                                 Text("Delete")
                                             }
                                         }
@@ -965,6 +977,33 @@ fun SfxApp() {
                         )
                     }
                 }
+            }
+        )
+    }
+
+    val target = renameTarget
+    if (target != null) {
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("Rename project") },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    singleLine = true,
+                    label = { Text("Project name") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val success = ProjectLibrary.rename(ctx, target.id, renameValue)
+                    savedProjects = ProjectLibrary.load(ctx)
+                    status = if (success) "Project renamed" else "Enter a valid project name"
+                    renameTarget = null
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text("Cancel") }
             }
         )
     }
