@@ -32,6 +32,8 @@ import com.vishal.sfxeditor.data.LibraryDatabase
 import com.vishal.sfxeditor.data.AudioAssetEntity
 import com.vishal.sfxeditor.data.AudioCategoryEntity
 import com.vishal.sfxeditor.data.AudioPreviewController
+import com.vishal.sfxeditor.data.AutoAssetResolver
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
 
@@ -76,6 +78,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SfxApp() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    val appScope = rememberCoroutineScope()
 
     var page by remember { mutableStateOf("home") }
     var logicutCode by remember { mutableStateOf("") }
@@ -789,20 +792,28 @@ fun SfxApp() {
 
                                 Button(
                                     onClick = {
-                                        try {
-                                            val parsed = ProjectParser.parse(raw)
+                                        appScope.launch {
+                                            try {
+                                                status = "Checking offline SFX & Music Library..."
+                                                val parsed = ProjectParser.parse(raw)
+                                                val dao = LibraryDatabase.getDatabase(ctx).libraryDao()
+                                                val resolution = AutoAssetResolver.resolve(
+                                                    context = ctx,
+                                                    slots = parsed.assets,
+                                                    dao = dao
+                                                )
+                                                val resolvedProject = parsed.copy(assets = resolution.assets)
 
-                                            project = parsed
-                                            assets = parsed.assets
-                                            events = parsed.events
-                                            activeSavedId = null
+                                                project = resolvedProject
+                                                assets = resolution.assets
+                                                events = parsed.events
+                                                activeSavedId = null
+                                                page = "timeline"
 
-                                            status =
-                                                "Valid JSON: ${parsed.assets.size} assets, ${parsed.events.size} events"
-
-                                        } catch (error: Exception) {
-                                            status =
-                                                "Validation error: ${error.message}"
+                                                status = "Ready: ${resolution.matched} matched from Library, ${resolution.missing} missing. ${parsed.events.size} timeline events loaded."
+                                            } catch (error: Exception) {
+                                                status = "Validation/matching error: ${error.message}"
+                                            }
                                         }
                                     },
                                     enabled = raw.isNotBlank(),
