@@ -27,8 +27,7 @@ class ProjectRecoveryManager(context: Context) {
 
     fun getCheckpoint(): SavedProject? {
         return runCatching {
-            ProjectLibrary.load(appContext)
-                .firstOrNull { it.id == RECOVERY_ID }
+            ProjectLibrary.loadRecoveryCheckpoint(appContext)
         }.getOrNull()
     }
 
