@@ -65,15 +65,18 @@ object ProjectLibrary {
         val cleanName = newName.trim()
         if (cleanName.isBlank()) return false
 
-        val projects = load(context).toMutableList()
-        val index = projects.indexOfFirst { it.id == id }
+        // Use the complete stored list here, not load(): load() intentionally
+        // hides the reserved recovery checkpoint. Persisting only the visible
+        // projects would otherwise erase that checkpoint during a rename.
+        val allProjects = loadAll(context).toMutableList()
+        val index = allProjects.indexOfFirst { it.id == id }
         if (index < 0) return false
 
-        projects[index] = projects[index].copy(
+        allProjects[index] = allProjects[index].copy(
             name = cleanName,
             savedAt = System.currentTimeMillis()
         )
-        persist(context, projects)
+        persist(context, allProjects)
         return true
     }
 
