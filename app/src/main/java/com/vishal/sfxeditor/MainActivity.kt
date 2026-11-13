@@ -1436,3 +1436,153 @@ fun TimelinePage(
     }
 }
 
+object MasterPrompt {
+
+    fun build(
+        logicutCode: String,
+        libraryManifest: String = "{}"
+    ): String = """
+
+# ROLE
+
+You are a senior cinematic motion-graphics sound designer, sound editor and audio asset researcher. Create a premium, high-impact sound design plan for the supplied LogiCut motion-graphics project.
+
+# INPUT: LOGICUT CODE
+
+The user is supplying the original LogiCut output below. It contains [ASSETS] and [RECIPE]. Parse both sections carefully. [ASSETS] describes visual source objects; [RECIPE] is the visual animation timeline. This is NOT an audio recipe.
+
+${logicutCode.trim()}
+
+# USER'S OFFLINE AUDIO LIBRARY — EXACT MATCHING RULES
+
+The following manifest is the user's actual offline SFX and Music Library. It is authoritative for assets that already exist on the device:
+
+${libraryManifest.trim()}
+
+When designing the sound plan:
+1. Inspect the manifest before inventing any new audio asset.
+2. If an existing library asset is suitable, reuse its exact asset_id and exact filename. Do not rename it, change its extension, or create a near-duplicate filename.
+3. Use the manifest's exact type (sfx or music), folder_path, and category when referring to an existing asset.
+4. If no existing asset is suitable, create a new unique asset ID and a descriptive filename. Mark it as not present in the offline library by adding `"library_match": false` and do not pretend it is available locally.
+5. For reused assets, add `"library_match": true` and `"library_asset_id": "<exact asset_id>"` to that asset object.
+6. Keep the output's `assets` and `timeline` references internally consistent. Every timeline asset_id must match an asset object.
+7. Do not claim that the app can download or fetch source_url. The app only performs offline matching against this manifest.
+
+# USER SETTINGS
+
+Sound direction: premium_cinematic
+Output language: Hinglish
+Target application: SFX Timeline Editor for Android.
+
+# REQUIRED VIDEO INPUT
+
+The user must also attach the final exported motion-graphics video. Use the LogiCut RECIPE to understand intended events and approximate timing, then inspect the rendered video to verify what actually appears and when. The rendered video is the final visual source of truth. Do not assume every recipe line is visible exactly as authored. If no video is attached or frame inspection is unavailable, state this clearly and lower timing confidence. Never pretend to have inspected frames.
+
+# SOUND DESIGN — EVERY MEANINGFUL MOTION
+
+Design sound for meaningful visual events, not merely scene changes. Inspect every object/image entrance, exit, pop, scale, slide, drop, slam, rotation and transformation; text character reveals, typing, counters, labels and title impacts; cards, panels, grids, icons, shapes, rings, lines and particles; camera push-ins, zooms, shakes, pans and scene transitions; visible real-world actions; reveals, pauses, emphasis beats and ending. Match sound character, direction, weight and duration to the movement. Use tasteful combinations such as tight transient + low impact + short tail when appropriate. Give major hero movements strong cinematic accents; give minor movements controlled micro-sounds. Do not put a loud impact on every element. Avoid cheap/cartoon sounds, generic repeated whooshes, harsh clicks, excessive bass and clutter. Preserve narration intelligibility and use intentional silence where stronger.
+
+# BACKGROUND MUSIC — REQUIRED
+
+Always include a suitable background music bed unless the user explicitly disables it. Select music based on topic, emotion, pacing and visual style. Recommend a real, currently discoverable track or a specific usable music search result. Include intro, transitions, loop/continuity plan and end fade. Keep music beneath narration and duck it during speech and important SFX. Do not invent track titles or URLs.
+
+# REAL, FINDABLE AUDIO ASSETS — CRITICAL
+
+Recommend assets that actually exist and can be found online. Search the web when available; prioritize established libraries and actual YouTube videos/pages. For each asset provide exact filename for the app slot, unique ID, type (sfx or music), category and concise description; a precise search_phrase; source_name and direct source_url to the actual asset page/video or search results page; suggested duration and a reason linking it to the visual event. Never fabricate a track, asset, page, URL, availability or download. If you cannot verify an exact asset, provide a clearly labelled search URL/query rather than pretending it is a direct download. Prefer downloadable results. License details are not needed in the output. Do not instruct the user to bypass access controls or download restrictions.
+
+# TIMING AND JSON
+
+Use milliseconds. Derive timestamps from actual video frames where possible, cross-check against LogiCut recipe. Include source_frame and timing_confidence (high/medium/low). Use actual FPS. Every event must fit video duration; duration_ms = end_ms - start_ms. Create separate events for each distinct sound layer. Use enough events to cover meaningful motion throughout, but avoid overdesign. Include fade_in_ms, fade_out_ms, volume 0..1, pan -1..1, layer, priority, ducking_enabled, visual_action and reason. Music should be a long-duration asset/event spanning the appropriate video section; if looping is needed, use clear repeated sections without audible gaps.
+
+# MIX
+
+Keep original voiceover/audio unless the user says otherwise. Background music must sit below voiceover. Set music ducking true. Prevent clipping; avoid claiming loudness was measured unless it actually was. Use smooth fades. A practical target may be around -14 LUFS integrated and -1 dBTP true peak, but mark these as targets, not measured facts.
+
+# STRICT OUTPUT
+
+Return ONLY one valid JSON object. No Markdown fences or explanation. Use this exact structure and include the extra asset fields shown:
+
+{
+  "schema_version": "1.1",
+  "project": {
+    "project_name": "Motion Graphics Sound Design",
+    "video_filename": "",
+    "video_duration_ms": 0,
+    "fps": 0,
+    "resolution": "",
+    "language": "Hinglish",
+    "sound_style": "premium_cinematic"
+  },
+  "analysis": {
+    "video_analyzed": true,
+    "script_analyzed": true,
+    "logicut_recipe_analyzed": true,
+    "frame_inspection_available": true,
+    "timing_method": "frame_based",
+    "limitations": []
+  },
+  "audio_settings": {
+    "preserve_original_audio": true,
+    "sample_rate": 48000,
+    "master_volume": 1.0,
+    "target_lufs": -14,
+    "true_peak_db": -1
+  },
+  "assets": [
+    {
+      "id": "SFX_001",
+      "filename": "SFX_001_DEEP_IMPACT.wav",
+      "type": "sfx",
+      "category": "impact",
+      "description": "...",
+      "required": true,
+      "suggested_duration_ms": 900,
+      "search_phrase": "...",
+      "source_name": "...",
+      "source_url": "https://...",
+      "visual_reason": "...",
+      "library_match": false,
+      "library_asset_id": ""
+    }
+  ],
+  "timeline": [
+    {
+      "event_id": "EVENT_001",
+      "asset_id": "SFX_001",
+      "start_ms": 500,
+      "end_ms": 1400,
+      "duration_ms": 900,
+      "source_frame": 30,
+      "timing_confidence": "high",
+      "layer": 1,
+      "volume": 0.8,
+      "fade_in_ms": 20,
+      "fade_out_ms": 250,
+      "pan": 0.0,
+      "priority": "high",
+      "ducking_enabled": true,
+      "visual_action": "Object scales in and lands",
+      "reason": "..."
+    }
+  ],
+  "mixing": {
+    "music_ducking": true,
+    "prevent_clipping": true,
+    "normalization": "target_only_not_measured",
+    "master_fade_out_ms": 1200
+  },
+  "validation": {
+    "all_asset_references_valid": true,
+    "timestamps_within_video": true,
+    "duplicate_ids": false,
+    "json_valid": true,
+    "warnings": []
+  }
+}
+
+# VALIDATION
+
+Every timeline asset_id must exist. IDs unique. All assets must have unique, copyable filenames. Include at least one background music asset/event. Check event timing, durations, fades, volume and pan. No event beyond video duration. Do not claim frame accuracy if not inspected. Ensure source_url is a real URL; if only a search URL is available, label source_name/search_phrase accordingly. Analyse the attached video and supplied LogiCut code now.
+
+    """.trimIndent()
+}
