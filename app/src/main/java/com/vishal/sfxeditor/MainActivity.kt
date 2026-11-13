@@ -31,6 +31,18 @@ import com.vishal.sfxeditor.data.AudioLibraryRoute
 import java.io.File
 import java.io.FileInputStream
 
+private val PinkPrimary = Color(0xFFFF70B7)
+private val PinkSoft = Color(0xFFFFA6D1)
+private val PinkLight = Color(0xFFFFD6E9)
+private val Lavender = Color(0xFFC9A7FF)
+private val Background = Color(0xFF100A13)
+private val SurfaceDark = Color(0xFF1B101D)
+private val CardDark = Color(0xFF2B192A)
+private val CardDeep = Color(0xFF301B2D)
+private val TextMain = Color(0xFFFFF1F7)
+private val TextMuted = Color(0xFFE7C8D9)
+private val WarningPink = Color(0xFFFFC1D9)
+
 fun displayName(
     ctx: android.content.Context,
     u: Uri
@@ -271,14 +283,22 @@ fun SfxApp() {
 
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = Color(0xFF69E7B9),
-            secondary = Color(0xFF80CFFF),
-            background = Color(0xFF090F14),
-            surface = Color(0xFF14202A)
+            primary = PinkPrimary,
+            onPrimary = Color(0xFF260D1B),
+            secondary = PinkSoft,
+            onSecondary = Color(0xFF321323),
+            tertiary = Lavender,
+            background = Background,
+            onBackground = TextMain,
+            surface = SurfaceDark,
+            onSurface = TextMain,
+            surfaceVariant = CardDeep,
+            onSurfaceVariant = TextMuted,
+            outline = Color(0xFF80536F)
         )
     ) {
         Scaffold(
-            containerColor = Color(0xFF090F14),
+            containerColor = Background,
 
             topBar = {
                 TopAppBar(
@@ -286,26 +306,28 @@ fun SfxApp() {
                         Column {
                             Text(
                                 "SFX TIMELINE EDITOR",
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = TextMain
                             )
 
                             Text(
                                 "AI-assisted cinematic sound design",
                                 fontSize = 11.sp,
-                                color = Color.LightGray
+                                color = PinkSoft
                             )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF101A22),
-                        titleContentColor = Color.White
+                        containerColor = SurfaceDark,
+                        titleContentColor = TextMain
                     )
                 )
             },
 
             bottomBar = {
                 NavigationBar(
-                    containerColor = Color(0xFF101A22)
+                    containerColor = SurfaceDark,
+                    contentColor = PinkSoft
                 ) {
                     listOf(
                         "home" to "Home",
@@ -337,8 +359,24 @@ fun SfxApp() {
                             },
 
                             label = {
-                                Text(label, fontSize = 10.sp)
-                            }
+                                Text(
+                                    label,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (page == key) {
+                                        FontWeight.Bold
+                                    } else {
+                                        FontWeight.Medium
+                                    }
+                                )
+                            },
+
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color(0xFF260D1B),
+                                selectedTextColor = PinkSoft,
+                                indicatorColor = PinkPrimary,
+                                unselectedIconColor = Color(0xFFB99AAA),
+                                unselectedTextColor = Color(0xFFB99AAA)
+                            )
                         )
                     }
                 }
@@ -361,13 +399,13 @@ fun SfxApp() {
                                 Text(
                                     "Your sound design workspace",
                                     fontSize = 24.sp,
-                                    color = Color.White,
+                                    color = TextMain,
                                     fontWeight = FontWeight.Bold
                                 )
 
                                 Text(
                                     "Script → AI JSON → Assets → Timeline → MP4",
-                                    color = Color.LightGray
+                                    color = TextMuted
                                 )
                             }
 
@@ -445,7 +483,7 @@ fun SfxApp() {
                                         "$videoName\n" +
                                         "${assets.count { it.uri != null }} / ${assets.size} assets assigned\n" +
                                         status,
-                                    color = Color.LightGray
+                                    color = TextMuted
                                 )
                             }
                         }
@@ -464,13 +502,13 @@ fun SfxApp() {
                                 Text(
                                     "MY PROJECTS",
                                     fontSize = 24.sp,
-                                    color = Color.White,
+                                    color = TextMain,
                                     fontWeight = FontWeight.Bold
                                 )
 
                                 Text(
                                     "Saved projects stay on this device. Open one to continue editing.",
-                                    color = Color.LightGray,
+                                    color = TextMuted,
                                     fontSize = 12.sp
                                 )
                             }
@@ -494,7 +532,7 @@ fun SfxApp() {
                                 item {
                                     Text(
                                         "No saved projects yet. Open a project and tap Save Project.",
-                                        color = Color.LightGray
+                                        color = TextMuted
                                     )
                                 }
                             }
@@ -506,7 +544,7 @@ fun SfxApp() {
 
                                 Card(
                                     colors = CardDefaults.cardColors(
-                                        containerColor = Color(0xFF182A32)
+                                        containerColor = CardDark
                                     )
                                 ) {
                                     Column(
@@ -518,20 +556,20 @@ fun SfxApp() {
 
                                         Text(
                                             saved.name,
-                                            color = Color.White,
+                                            color = TextMain,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 17.sp
                                         )
 
                                         Text(
                                             "${saved.assets.size} assets · ${saved.events.size} timeline events",
-                                            color = Color.LightGray,
+                                            color = TextMuted,
                                             fontSize = 12.sp
                                         )
 
                                         Text(
                                             "Video: ${saved.videoName}",
-                                            color = Color.Gray,
+                                            color = PinkSoft,
                                             fontSize = 11.sp
                                         )
 
@@ -541,7 +579,7 @@ fun SfxApp() {
                                                     .getDateTimeInstance()
                                                     .format(java.util.Date(saved.savedAt))
                                             }",
-                                            color = Color.Gray,
+                                            color = TextMuted,
                                             fontSize = 10.sp
                                         )
 
@@ -601,13 +639,13 @@ fun SfxApp() {
                                 Text(
                                     "GET CODE",
                                     fontSize = 24.sp,
-                                    color = Color.White,
+                                    color = TextMain,
                                     fontWeight = FontWeight.Bold
                                 )
 
                                 Text(
                                     "Paste the complete LogiCut AI output: [ASSETS] and [RECIPE]. Then copy the generated prompt to your video-capable AI and attach the exported motion-graphics video.",
-                                    color = Color.LightGray,
+                                    color = TextMuted,
                                     fontSize = 12.sp
                                 )
 
@@ -627,13 +665,13 @@ fun SfxApp() {
                             item {
                                 Text(
                                     "FIXED SOUND DESIGN PROFILE",
-                                    color = Color.White,
+                                    color = TextMain,
                                     fontWeight = FontWeight.Bold
                                 )
 
                                 Text(
                                     "Premium Cinematic · Hinglish",
-                                    color = Color(0xFF69E7B9),
+                                    color = PinkPrimary,
                                     fontSize = 13.sp
                                 )
 
@@ -695,7 +733,7 @@ fun SfxApp() {
                                 Text(
                                     "I HAVE CODE",
                                     fontSize = 24.sp,
-                                    color = Color.White,
+                                    color = TextMain,
                                     fontWeight = FontWeight.Bold
                                 )
 
@@ -714,7 +752,7 @@ fun SfxApp() {
 
                                 Text(
                                     videoName,
-                                    color = Color(0xFF69E7B9),
+                                    color = PinkPrimary,
                                     fontSize = 12.sp
                                 )
 
@@ -778,7 +816,7 @@ fun SfxApp() {
                                 item {
                                     Text(
                                         "ASSET MANAGER · ${assets.count { it.uri != null }}/${assets.size}",
-                                        color = Color(0xFF69E7B9),
+                                        color = PinkPrimary,
                                         fontWeight = FontWeight.Bold
                                     )
 
@@ -807,7 +845,7 @@ fun SfxApp() {
                             item {
                                 Text(
                                     status,
-                                    color = Color.LightGray,
+                                    color = TextMuted,
                                     fontSize = 12.sp
                                 )
                             }
@@ -866,30 +904,36 @@ fun HomeTile(
 ) {
     Card(
         onClick = action,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF182A32)
+            containerColor = CardDark
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 3.dp
         )
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Text(
                 title,
-                color = Color.White,
+                color = PinkSoft,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
                 desc,
-                color = Color.LightGray,
+                color = TextMuted,
                 fontSize = 12.sp
             )
 
             Text(
                 "OPEN →",
-                color = Color(0xFF69E7B9),
+                color = PinkPrimary,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -920,14 +964,17 @@ fun AssetCard(
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
     Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF18232C)
+            containerColor = CardDeep
         )
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(10.dp)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
 
             Row(
@@ -936,7 +983,7 @@ fun AssetCard(
                 Icon(
                     Icons.Default.AudioFile,
                     contentDescription = null,
-                    tint = Color(0xFF69E7B9)
+                    tint = PinkPrimary
                 )
 
                 Spacer(Modifier.width(8.dp))
@@ -944,14 +991,14 @@ fun AssetCard(
                 Column(Modifier.weight(1f)) {
                     Text(
                         a.filename,
-                        color = Color.White,
+                        color = TextMain,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
 
                     Text(
                         "${a.id} · ${a.type}",
-                        color = Color.LightGray,
+                        color = TextMuted,
                         fontSize = 10.sp
                     )
                 }
@@ -959,11 +1006,12 @@ fun AssetCard(
                 Text(
                     if (a.uri != null) "ADDED" else "MISSING",
                     color = if (a.uri != null) {
-                        Color(0xFF69E7B9)
+                        PinkPrimary
                     } else {
-                        Color(0xFFFFC46B)
+                        WarningPink
                     },
-                    fontSize = 10.sp
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
@@ -1000,7 +1048,7 @@ fun AssetCard(
             if (a.searchPhrase.isNotBlank()) {
                 Text(
                     "Search: ${a.searchPhrase}",
-                    color = Color.LightGray,
+                    color = TextMuted,
                     fontSize = 10.sp
                 )
             }
@@ -1008,7 +1056,7 @@ fun AssetCard(
             if (a.sourceName.isNotBlank()) {
                 Text(
                     "Source: ${a.sourceName}",
-                    color = Color(0xFF80CFFF),
+                    color = PinkSoft,
                     fontSize = 10.sp
                 )
             }
@@ -1086,7 +1134,7 @@ fun TimelinePage(
         item {
             Text(
                 "TIMELINE & EXPORT",
-                color = Color.White,
+                color = TextMain,
                 fontSize = 23.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -1117,7 +1165,7 @@ fun TimelinePage(
 
             Text(
                 videoName,
-                color = Color.LightGray,
+                color = TextMuted,
                 fontSize = 11.sp
             )
         }
@@ -1126,14 +1174,14 @@ fun TimelinePage(
             item {
                 Text(
                     "Import and validate JSON first.",
-                    color = Color(0xFFFFC46B)
+                    color = WarningPink
                 )
             }
         } else {
             item {
                 Text(
                     "${project.name} · ${project.durationMs} ms · ${project.fps} FPS",
-                    color = Color.LightGray,
+                    color = TextMuted,
                     fontSize = 12.sp
                 )
 
@@ -1146,7 +1194,7 @@ fun TimelinePage(
 
                 Text(
                     "ASSETS",
-                    color = Color(0xFF69E7B9),
+                    color = PinkPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -1162,7 +1210,7 @@ fun TimelinePage(
             item {
                 Text(
                     "TIMELINE EVENTS",
-                    color = Color(0xFF69E7B9),
+                    color = PinkPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -1171,7 +1219,7 @@ fun TimelinePage(
         items(events) { e ->
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF18232C)
+                    containerColor = CardDeep
                 )
             ) {
                 Column(Modifier.padding(12.dp)) {
@@ -1181,20 +1229,20 @@ fun TimelinePage(
                             assets.firstOrNull { it.id == e.assetId }?.filename
                                 ?: e.assetId
                         }",
-                        color = Color.White,
+                        color = TextMain,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
 
                     Text(
                         "${e.startMs}ms → ${e.endMs}ms · Layer ${e.layer}",
-                        color = Color.LightGray,
+                        color = TextMuted,
                         fontSize = 11.sp
                     )
 
                     Text(
                         e.visualAction.ifBlank { e.reason },
-                        color = Color.Gray,
+                        color = PinkSoft,
                         fontSize = 10.sp
                     )
 
@@ -1203,7 +1251,7 @@ fun TimelinePage(
                     ) {
                         Text(
                             "Volume",
-                            color = Color.LightGray,
+                            color = TextMuted,
                             fontSize = 11.sp
                         )
 
@@ -1225,7 +1273,7 @@ fun TimelinePage(
 
                         Text(
                             "${(e.volume * 100).toInt()}%",
-                            color = Color.White,
+                            color = TextMain,
                             fontSize = 10.sp
                         )
                     }
@@ -1260,9 +1308,9 @@ fun TimelinePage(
                 Text(
                     "Required assets missing: $missing",
                     color = if (missing == 0) {
-                        Color(0xFF69E7B9)
+                        PinkPrimary
                     } else {
-                        Color(0xFFFFC46B)
+                        WarningPink
                     }
                 )
 
@@ -1291,13 +1339,13 @@ fun TimelinePage(
         item {
             Text(
                 status,
-                color = Color.LightGray,
+                color = TextMuted,
                 fontSize = 11.sp
             )
 
             Text(
                 "Renderer uses AndroidX Media3 Composition to mix the source video and synchronized audio sequences. Crossfades between tracks are not supported by Media3 Composition; fade envelopes on individual clips are applied.",
-                color = Color.Gray,
+                color = TextMuted,
                 fontSize = 10.sp
             )
         }
@@ -1307,7 +1355,7 @@ fun TimelinePage(
 object MasterPrompt {
 
     fun build(logicutCode: String): String = """
-        
+
 # ROLE
 
 You are a senior cinematic motion-graphics sound designer, sound editor and audio asset researcher. Create a premium, high-impact sound design plan for the supplied LogiCut motion-graphics project.
