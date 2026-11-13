@@ -28,6 +28,10 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.vishal.sfxeditor.data.AudioLibraryRoute
+import com.vishal.sfxeditor.data.LibraryDatabase
+import com.vishal.sfxeditor.data.AudioAssetEntity
+import com.vishal.sfxeditor.data.AudioCategoryEntity
+import com.vishal.sfxeditor.data.AudioPreviewController
 import java.io.File
 import java.io.FileInputStream
 
@@ -868,6 +872,10 @@ fun SfxApp() {
                             { updatedEvents ->
                                 events = updatedEvents
                             },
+                            { updatedAssets ->
+                                assets = updatedAssets
+                                project = project?.copy(assets = updatedAssets)
+                            },
                             {
                                 videoPick.launch(arrayOf("video/*"))
                             },
@@ -1097,6 +1105,7 @@ fun TimelinePage(
     assets: List<AssetSlot>,
     events: List<AudioEvent>,
     onEvents: (List<AudioEvent>) -> Unit,
+    onAssets: (List<AssetSlot>) -> Unit,
     onVideo: () -> Unit,
     onBulk: () -> Unit,
     onPick: (String) -> Unit,
@@ -1107,6 +1116,12 @@ fun TimelinePage(
     onSaveProject: () -> Unit,
     status: String
 ) {
+    val libraryDb = remember(ctx) { LibraryDatabase.getDatabase(ctx) }
+    val libraryDao = remember(libraryDb) { libraryDb.libraryDao() }
+    val libraryAssets by libraryDao.getAllAssets().collectAsState(initial = emptyList())
+    val libraryCategories by libraryDao.getAllCategories().collectAsState(initial = emptyList())
+    var replacingAssetId by remember { mutableStateOf<String?>(null) }
+
     val player = remember(video) {
         if (video == null) {
             null
@@ -1121,6 +1136,30 @@ fun TimelinePage(
     DisposableEffect(player) {
         onDispose {
             player?.release()
+        }
+    }
+
+    if (replacingAssetId != null) {
+        val target = assets.firstOrNull { it.id == replacingAssetId }
+        if (target != null) {
+            ReplaceAudioPickerDialog(
+                categories = libraryCategories,
+                libraryAssets = libraryAssets,
+                target = target,
+                onDismiss = { replacingAssetId = null },
+                onSelect = { chosen ->
+                    val updated = assets.map { slot ->
+                        if (slot.id == target.id) slot.copy(
+                            filename = chosen.fileName,
+                            uri = Uri.fromFile(File(ctx.filesDir, chosen.relativePath)),
+                            libraryAssetId = chosen.id,
+                            libraryCategoryId = chosen.categoryId
+                        ) else slot
+                    }
+                    onAssets(updated)
+                    replacingAssetId = null
+                }
+            )
         }
     }
 
@@ -1201,8 +1240,16 @@ fun TimelinePage(
         }
 
         items(assets) { asset ->
-            AssetCard(asset) {
-                onPick(asset.id)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AssetCard(asset) { onPick(asset.id) }
+                OutlinedButton(
+                    onClick = { replacingAssetId = asset.id },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Replace from Library")
+                }
             }
         }
 
@@ -1350,6 +1397,120 @@ fun TimelinePage(
             )
         }
     }
+}
+
+
+@Composable
+private fun ReplaceAudioPickerDialog(
+    categories: List<AudioCategoryEntity>,
+    libraryAssets: List<AudioAssetEntity>,
+    target: AssetSlot,
+    onDismiss: () -> Unit,
+    onSelect: (AudioAssetEntity) -> Unit
+) {
+    val audioType = if (target.type.equals("music", true)) "MUSIC" else "SFX"
+    val previewContext = androidx.compose.ui.platform.LocalContext.current
+    var folderId by remember(target.id) { mutableStateOf(target.libraryCategoryId) }
+    val preview = remember(previewContext) { AudioPreviewController(previewContext) }
+    var playingId by remember { mutableStateOf<String?>(null) }
+    DisposableEffect(preview) { onDispose { preview.release() } }
+
+    val folder = categories.firstOrNull { it.id == folderId }
+    val childFolders = categories.filter {
+        it.assetType == audioType && it.parentId == folderId
+    }.sortedBy { it.sortOrder }
+    val files = libraryAssets.filter {
+        it.assetType == audioType && it.categoryId == folderId && !it.missingOnDisk
+    }.sortedBy { it.fileName.lowercase() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text("Replace ${if (audioType == "MUSIC") "Music" else "SFX"}")
+                Text(
+                    "Library${folder?.let { " / ${it.name}" } ?: ""}",
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+            }
+        },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 460.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (folder != null) {
+                    TextButton(onClick = { folderId = folder.parentId }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = null)
+                        Text("Back")
+                    }
+                }
+                LazyColumn(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    items(childFolders, key = { it.id }) { child ->
+                        OutlinedButton(
+                            onClick = { folderId = child.id },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Folder, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(child.name)
+                            Spacer(Modifier.weight(1f))
+                            Icon(Icons.Default.ChevronRight, contentDescription = null)
+                        }
+                    }
+                    items(files, key = { it.id }) { audio ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = CardDeep),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(8.dp)) {
+                                Text(audio.fileName, color = TextMain, fontSize = 12.sp)
+                                Text(
+                                    "${audio.durationMs / 1000.0}s · ${audio.extension.uppercase()}",
+                                    color = TextMuted,
+                                    fontSize = 10.sp
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (playingId == audio.id) {
+                                                preview.pause()
+                                                playingId = null
+                                            } else if (preview.play(audio)) {
+                                                playingId = audio.id
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            if (playingId == audio.id) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = null
+                                        )
+                                        Text(if (playingId == audio.id) "Pause" else "Preview")
+                                    }
+                                    Button(
+                                        onClick = {
+                                            preview.stop()
+                                            onSelect(audio)
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) { Text("Select") }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (childFolders.isEmpty() && files.isEmpty()) {
+                    Text("This folder is empty.", color = TextMuted)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 object MasterPrompt {
