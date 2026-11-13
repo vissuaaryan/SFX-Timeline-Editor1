@@ -33,6 +33,8 @@ import com.vishal.sfxeditor.data.AudioAssetEntity
 import com.vishal.sfxeditor.data.AudioCategoryEntity
 import com.vishal.sfxeditor.data.AudioPreviewController
 import com.vishal.sfxeditor.data.AutoAssetResolver
+import com.vishal.sfxeditor.data.LibraryManifestBuilder
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
@@ -684,8 +686,25 @@ fun SfxApp() {
 
                                 Button(
                                     onClick = {
-                                        prompt = MasterPrompt.build(logicutCode)
-                                        status = "Prompt generated"
+                                        appScope.launch {
+                                            try {
+                                                status = "Reading offline SFX & Music Library..."
+                                                val dao = LibraryDatabase.getDatabase(ctx).libraryDao()
+                                                val libraryAssets = dao.getAllAssets().first()
+                                                val libraryCategories = dao.getAllCategories().first()
+                                                val manifest = LibraryManifestBuilder.build(
+                                                    assets = libraryAssets,
+                                                    categories = libraryCategories
+                                                ).toString(2)
+                                                prompt = MasterPrompt.build(
+                                                    logicutCode = logicutCode,
+                                                    libraryManifest = manifest
+                                                )
+                                                status = "Prompt generated with ${libraryAssets.size} Library assets and ${libraryCategories.size} folders"
+                                            } catch (error: Exception) {
+                                                status = "Could not read Library: ${error.message}"
+                                            }
+                                        }
                                     },
                                     enabled = logicutCode.contains("[RECIPE]") &&
                                         logicutCode.contains("[ASSETS]"),
@@ -1526,7 +1545,10 @@ private fun ReplaceAudioPickerDialog(
 
 object MasterPrompt {
 
-    fun build(logicutCode: String): String = """
+    fun build(
+        logicutCode: String,
+        libraryManifest: String = "{}"
+    ): String = """
 
 # ROLE
 
@@ -1537,6 +1559,21 @@ You are a senior cinematic motion-graphics sound designer, sound editor and audi
 The user is supplying the original LogiCut output below. It contains [ASSETS] and [RECIPE]. Parse both sections carefully. [ASSETS] describes visual source objects; [RECIPE] is the visual animation timeline. This is NOT an audio recipe.
 
 ${logicutCode.trim()}
+
+# USER'S OFFLINE AUDIO LIBRARY — EXACT MATCHING RULES
+
+The following manifest is the user's actual offline SFX and Music Library. It is authoritative for assets that already exist on the device:
+
+${libraryManifest.trim()}
+
+When designing the sound plan:
+1. Inspect the manifest before inventing any new audio asset.
+2. If an existing library asset is suitable, reuse its exact asset_id and exact filename. Do not rename it, change its extension, or create a near-duplicate filename.
+3. Use the manifest's exact type (sfx or music), folder_path, and category when referring to an existing asset.
+4. If no existing asset is suitable, create a new unique asset ID and a descriptive filename. Mark it as not present in the offline library by adding `"library_match": false` and do not pretend it is available locally.
+5. For reused assets, add `"library_match": true` and `"library_asset_id": "<exact asset_id>"` to that asset object.
+6. Keep the output's `assets` and `timeline` references internally consistent. Every timeline asset_id must match an asset object.
+7. Do not claim that the app can download or fetch source_url. The app only performs offline matching against this manifest.
 
 # USER SETTINGS
 
@@ -1610,7 +1647,9 @@ Return ONLY one valid JSON object. No Markdown fences or explanation. Use this e
       "search_phrase": "...",
       "source_name": "...",
       "source_url": "https://...",
-      "visual_reason": "..."
+      "visual_reason": "...",
+      "library_match": false,
+      "library_asset_id": ""
     }
   ],
   "timeline": [
