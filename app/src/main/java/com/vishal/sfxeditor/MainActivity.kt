@@ -100,6 +100,7 @@ fun SfxApp() {
     var project by remember { mutableStateOf<SfxProject?>(null) }
     var assets by remember { mutableStateOf<List<AssetSlot>>(emptyList()) }
     var events by remember { mutableStateOf<List<AudioEvent>>(emptyList()) }
+    val recoveryManager = remember(ctx) { ProjectRecoveryManager(ctx) }
 
     var pending by remember { mutableStateOf<String?>(null) }
     var replaceTargetAssetId by remember { mutableStateOf<String?>(null) }
@@ -130,6 +131,7 @@ fun SfxApp() {
         )
 
         ProjectLibrary.upsert(ctx, item)
+        recoveryManager.saveCheckpoint(item)
         activeSavedId = id
         savedProjects = ProjectLibrary.load(ctx)
         status = "Project saved to Projects"
@@ -147,7 +149,7 @@ fun SfxApp() {
         videoName = item.videoName
         activeSavedId = item.id
         page = "timeline"
-        status = "Project loaded. Edit and tap Save Project to update it."
+        status = "Project loaded. Changes are autosaved automatically."
     }
 
     fun persist(uri: Uri) {
@@ -157,6 +159,31 @@ fun SfxApp() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
         } catch (_: Exception) {
+        }
+    }
+
+    // Debounced autosave + recovery checkpoint. Any project/timeline/media edit
+    // schedules a fresh snapshot; rapid edits are coalesced into one write.
+    LaunchedEffect(project, assets, events, video, videoName, activeSavedId) {
+        val currentProject = project
+        if (currentProject != null) {
+            kotlinx.coroutines.delay(1_500L)
+            val id = activeSavedId ?: java.util.UUID.randomUUID().toString()
+            val snapshot = SavedProject(
+                id = id,
+                name = currentProject.name,
+                savedAt = System.currentTimeMillis(),
+                videoUri = video?.toString() ?: "",
+                videoName = videoName,
+                project = currentProject.copy(assets = assets, events = events),
+                assets = assets,
+                events = events
+            )
+            ProjectLibrary.upsert(ctx, snapshot)
+            recoveryManager.saveCheckpoint(snapshot)
+            if (activeSavedId == null) activeSavedId = id
+            savedProjects = ProjectLibrary.load(ctx)
+            status = "Autosaved"
         }
     }
 
