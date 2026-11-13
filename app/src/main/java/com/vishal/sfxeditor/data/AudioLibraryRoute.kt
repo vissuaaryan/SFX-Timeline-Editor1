@@ -21,7 +21,11 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 @Composable
-fun AudioLibraryRoute() {
+fun AudioLibraryRoute(
+    selectionMode: Boolean = false,
+    initialCategoryId: String? = null,
+    onSelectAsset: (AudioAssetEntity) -> Unit = {}
+) {
     val context = LocalContext.current
 
     val database = remember(context) {
@@ -218,6 +222,13 @@ fun AudioLibraryRoute() {
             categories = categories,
             playingAssetId = playingAssetId,
             isPlaying = isPlaying,
+            selectionMode = selectionMode,
+            initialCategoryId = initialCategoryId,
+            onSelectAsset = { selected ->
+                previewController.pause()
+                playingAssetId = null
+                onSelectAsset(selected)
+            },
 
             onImport = { type, categoryId ->
                 selectedImportType = type
