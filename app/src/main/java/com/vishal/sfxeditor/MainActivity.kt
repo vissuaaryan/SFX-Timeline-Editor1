@@ -627,7 +627,7 @@ fun SfxApp() {
                                 )
 
                                 Text(
-                                    "Saved projects stay on this device. Open one to continue editing.",
+                                    "${savedProjects.size} saved projects · sorted by most recently modified",
                                     color = TextMuted,
                                     fontSize = 12.sp
                                 )
@@ -635,6 +635,23 @@ fun SfxApp() {
 
                             item {
                                 Button(
+                                    onClick = {
+                                        raw = ""
+                                        page = "import"
+                                        status = "New project: select the original video and import its AI JSON."
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = null
+                                    )
+                                    Text("Create New Project")
+                                }
+                            }
+
+                            item {
+                                OutlinedButton(
                                     onClick = {
                                         savedProjects = ProjectLibrary.load(ctx)
                                     },
@@ -644,7 +661,7 @@ fun SfxApp() {
                                         Icons.Default.Refresh,
                                         contentDescription = null
                                     )
-                                    Text("Refresh")
+                                    Text("Refresh Projects")
                                 }
                             }
 
@@ -694,7 +711,7 @@ fun SfxApp() {
                                         )
 
                                         Text(
-                                            "Saved: ${
+                                            "Last modified: ${
                                                 java.text.DateFormat
                                                     .getDateTimeInstance()
                                                     .format(java.util.Date(saved.savedAt))
