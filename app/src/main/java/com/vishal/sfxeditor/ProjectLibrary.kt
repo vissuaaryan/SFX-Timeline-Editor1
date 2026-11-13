@@ -48,6 +48,53 @@ object ProjectLibrary {
         persist(context, load(context).filterNot { it.id == id })
     }
 
+    /**
+     * Rename an existing project without changing its timeline or media links.
+     * Returns false when the project does not exist or the name is blank.
+     */
+    fun rename(context: Context, id: String, newName: String): Boolean {
+        val cleanName = newName.trim()
+        if (cleanName.isBlank()) return false
+
+        val projects = load(context).toMutableList()
+        val index = projects.indexOfFirst { it.id == id }
+        if (index < 0) return false
+
+        projects[index] = projects[index].copy(
+            name = cleanName,
+            savedAt = System.currentTimeMillis()
+        )
+        persist(context, projects)
+        return true
+    }
+
+    /**
+     * Creates an independent project-library entry while preserving the
+     * source project's asset IDs, timeline event IDs, timing and mix settings.
+     */
+    fun duplicate(context: Context, id: String): SavedProject? {
+        val source = load(context).firstOrNull { it.id == id } ?: return null
+        val now = System.currentTimeMillis()
+        val copy = source.copy(
+            id = java.util.UUID.randomUUID().toString(),
+            name = uniqueCopyName(source.name, load(context).map { it.name }),
+            savedAt = now
+        )
+        upsert(context, copy)
+        return copy
+    }
+
+    private fun uniqueCopyName(original: String, existingNames: List<String>): String {
+        val existing = existingNames.map { it.trim().lowercase() }.toSet()
+        var candidate = "$original Copy"
+        var suffix = 2
+        while (candidate.lowercase() in existing) {
+            candidate = "$original Copy $suffix"
+            suffix++
+        }
+        return candidate
+    }
+
     private fun persist(context: Context, items: List<SavedProject>) {
         val array = JSONArray()
         items.forEach { array.put(encode(it)) }
