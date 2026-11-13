@@ -35,14 +35,18 @@ class AudioLibraryRepository(
     ): AudioImportResult = withContext(Dispatchers.IO) {
 
         val resolver = context.contentResolver
-        val originalName = getDisplayName(uri) ?: "audio_${System.currentTimeMillis()}"
+        val originalName = getDisplayName(uri)
+            ?: "audio_${System.currentTimeMillis()}"
 
         val extension = originalName
             .substringAfterLast('.', "")
             .lowercase()
             .takeIf { it.matches(Regex("[a-z0-9]{1,10}")) }
-            ?: resolver.getType(uri)?.substringAfter("/")?.substringBefore(";")
-                ?.lowercase()?.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) }
+            ?: resolver.getType(uri)
+                ?.substringAfter("/")
+                ?.substringBefore(";")
+                ?.lowercase()
+                ?.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) }
             ?: "audio"
 
         val directory = File(
@@ -87,7 +91,9 @@ class AudioLibraryRepository(
 
             if (totalBytes == 0L) {
                 temporaryFile.delete()
-                return@withContext AudioImportResult.Failure("Audio file is empty")
+                return@withContext AudioImportResult.Failure(
+                    "Audio file is empty"
+                )
             }
 
             val hash = digest.digest().joinToString("") {
@@ -102,6 +108,7 @@ class AudioLibraryRepository(
             }
 
             val metadata = MediaMetadataRetriever()
+
             val durationMs = try {
                 metadata.setDataSource(temporaryFile.absolutePath)
                 metadata.extractMetadata(
@@ -158,11 +165,15 @@ class AudioLibraryRepository(
         } catch (error: SecurityException) {
             temporaryFile.delete()
             finalFile?.delete()
-            AudioImportResult.Failure("Permission denied while reading audio")
+
+            AudioImportResult.Failure(
+                "Permission denied while reading audio"
+            )
 
         } catch (error: IOException) {
             temporaryFile.delete()
             finalFile?.delete()
+
             AudioImportResult.Failure(
                 error.message ?: "Audio import failed"
             )
@@ -170,10 +181,31 @@ class AudioLibraryRepository(
         } catch (error: Exception) {
             temporaryFile.delete()
             finalFile?.delete()
+
             AudioImportResult.Failure(
                 error.message ?: "Unexpected import error"
             )
         }
+    }
+
+    suspend fun deleteAudio(
+        asset: AudioAssetEntity
+    ): Boolean = withContext(Dispatchers.IO) {
+
+        val root = File(context.filesDir, "audio").canonicalFile
+        val file = File(context.filesDir, asset.relativePath).canonicalFile
+
+        // Prevent deleting files outside the app's audio directory.
+        if (!file.path.startsWith(root.path + File.separator)) {
+            return@withContext false
+        }
+
+        if (file.exists() && !file.delete()) {
+            return@withContext false
+        }
+
+        dao.deleteAsset(asset)
+        true
     }
 
     private fun getDisplayName(uri: Uri): String? {
