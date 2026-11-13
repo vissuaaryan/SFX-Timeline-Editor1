@@ -77,7 +77,6 @@ fun AudioLibraryRoute() {
         mutableStateOf("Ready")
     }
 
-    // Create default categories only when a type has no categories.
     LaunchedEffect(dao) {
         seedDefaultCategories(dao, AudioType.SFX)
         seedDefaultCategories(dao, AudioType.MUSIC)
@@ -170,10 +169,72 @@ fun AudioLibraryRoute() {
                 }
             },
 
+            onRenameAsset = { asset, newName ->
+                scope.launch {
+                    try {
+                        dao.updateAsset(
+                            asset.copy(fileName = newName)
+                        )
+                        importStatus = "Audio renamed"
+                    } catch (error: Exception) {
+                        importStatus =
+                            "Rename failed: ${error.message}"
+                    }
+                }
+            },
+
+            onMoveAsset = { asset, categoryId ->
+                scope.launch {
+                    try {
+                        val validCategory = categoryId?.let { id ->
+                            categories.firstOrNull {
+                                it.id == id &&
+                                    it.assetType == asset.assetType
+                            }
+                        }
+
+                        if (categoryId != null && validCategory == null) {
+                            importStatus = "Invalid category"
+                        } else {
+                            dao.updateAsset(
+                                asset.copy(categoryId = validCategory?.id)
+                            )
+                            importStatus = "Audio category updated"
+                        }
+                    } catch (error: Exception) {
+                        importStatus =
+                            "Move failed: ${error.message}"
+                    }
+                }
+            },
+
+            onDeleteAsset = { asset ->
+                scope.launch {
+                    try {
+                        if (playingAssetId == asset.id) {
+                            previewController.pause()
+                            playingAssetId = null
+                        }
+
+                        val deleted = repository.deleteAudio(asset)
+
+                        importStatus = if (deleted) {
+                            "Audio deleted"
+                        } else {
+                            "Could not delete audio file"
+                        }
+                    } catch (error: Exception) {
+                        importStatus =
+                            "Delete failed: ${error.message}"
+                    }
+                }
+            },
+
             onAddCategory = { type, name, parentId ->
                 scope.launch {
                     try {
-                        val allCategories = dao.getAllCategories().first()
+                        val allCategories =
+                            dao.getAllCategories().first()
 
                         val validParent = parentId?.let { id ->
                             allCategories.firstOrNull {
@@ -186,7 +247,8 @@ fun AudioLibraryRoute() {
                                 it.assetType == type &&
                                     it.parentId == validParent?.id
                             }
-                            .maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
+                            .maxOfOrNull { it.sortOrder }
+                            ?.plus(1) ?: 0
 
                         dao.insertCategory(
                             AudioCategoryEntity(
@@ -225,10 +287,12 @@ fun AudioLibraryRoute() {
             onDeleteCategory = { category ->
                 scope.launch {
                     try {
-                        val allAssets = dao.getAllAssets().first()
-                        val allCategories = dao.getAllCategories().first()
+                        val allAssets =
+                            dao.getAllAssets().first()
 
-                        // Move direct assets to the deleted category's parent.
+                        val allCategories =
+                            dao.getAllCategories().first()
+
                         allAssets
                             .filter { it.categoryId == category.id }
                             .forEach { asset ->
@@ -239,7 +303,6 @@ fun AudioLibraryRoute() {
                                 )
                             }
 
-                        // Move child categories up one level.
                         allCategories
                             .filter { it.parentId == category.id }
                             .forEach { child ->
@@ -278,7 +341,8 @@ private suspend fun seedDefaultCategories(
     dao: LibraryDao,
     type: AudioType
 ) {
-    val existing = dao.getCategoriesByType(type.name).first()
+    val existing =
+        dao.getCategoriesByType(type.name).first()
 
     if (existing.isNotEmpty()) return
 
