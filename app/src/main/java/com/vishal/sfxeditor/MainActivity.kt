@@ -101,6 +101,9 @@ fun SfxApp() {
     var assets by remember { mutableStateOf<List<AssetSlot>>(emptyList()) }
     var events by remember { mutableStateOf<List<AudioEvent>>(emptyList()) }
     val recoveryManager = remember(ctx) { ProjectRecoveryManager(ctx) }
+    var recoveryCandidate by remember(ctx) {
+        mutableStateOf(recoveryManager.getCheckpoint())
+    }
 
     var pending by remember { mutableStateOf<String?>(null) }
     var replaceTargetAssetId by remember { mutableStateOf<String?>(null) }
@@ -1004,6 +1007,38 @@ fun SfxApp() {
                         )
                     }
                 }
+            }
+        )
+    }
+
+    val recovery = recoveryCandidate
+    if (recovery != null) {
+        AlertDialog(
+            onDismissRequest = { recoveryCandidate = null },
+            title = { Text("Recover previous session?") },
+            text = {
+                Text(
+                    "An autosaved recovery copy was found: ${recovery.name}. " +
+                        "It contains ${recovery.assets.size} assets and ${recovery.events.size} timeline events. " +
+                        "Would you like to restore it as a project?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val restored = recoveryManager.restoreAsProject("${recovery.project.name} (Recovered)")
+                    if (restored != null) {
+                        openSavedProject(restored)
+                        recoveryManager.clearCheckpoint()
+                        savedProjects = ProjectLibrary.load(ctx)
+                        status = "Previous session recovered"
+                    } else {
+                        status = "Could not recover previous session"
+                    }
+                    recoveryCandidate = null
+                }) { Text("Recover") }
+            },
+            dismissButton = {
+                TextButton(onClick = { recoveryCandidate = null }) { Text("Later") }
             }
         )
     }
