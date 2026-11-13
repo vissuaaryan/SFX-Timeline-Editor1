@@ -3,6 +3,9 @@ package com.vishal.sfxeditor.data
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -35,6 +38,10 @@ fun AudioLibraryRoute() {
 
     val batchImporter = remember(repository) {
         AudioBatchImporter(repository)
+    }
+
+    val backupManager = remember(context, dao) {
+        LibraryBackupManager(context, dao)
     }
 
     val previewController = remember(context) {
@@ -75,6 +82,56 @@ fun AudioLibraryRoute() {
 
     var importStatus by remember {
         mutableStateOf("Ready")
+    }
+
+    var isBackingUp by remember { mutableStateOf(false) }
+    var isRestoring by remember { mutableStateOf(false) }
+
+    val backupCreateLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                isBackingUp = true
+                importStatus = "Creating library backup..."
+                try {
+                    backupManager.exportBackup(uri)
+                        .onSuccess { result ->
+                            importStatus = "Backup complete: ${result.assets} audio files, " +
+                                "${result.categories} folders. Missing files: ${result.missingFiles}."
+                        }
+                        .onFailure { error ->
+                            importStatus = "Backup failed: ${error.message}"
+                        }
+                } finally {
+                    isBackingUp = false
+                }
+            }
+        }
+    }
+
+    val backupRestoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                isRestoring = true
+                importStatus = "Restoring library backup..."
+                try {
+                    backupManager.restoreBackup(uri)
+                        .onSuccess { result ->
+                            importStatus = "Restore complete: ${result.assetsAdded} added, " +
+                                "${result.alreadyPresent} already present, " +
+                                "${result.missingAudio} missing audio."
+                        }
+                        .onFailure { error ->
+                            importStatus = "Restore failed: ${error.message}"
+                        }
+                } finally {
+                    isRestoring = false
+                }
+            }
+        }
     }
 
     LaunchedEffect(dao) {
@@ -136,6 +193,26 @@ fun AudioLibraryRoute() {
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { backupCreateLauncher.launch("SFX_Library_Backup.zip") },
+                enabled = !isBackingUp && !isRestoring && !isImporting
+            ) {
+                Text(if (isBackingUp) "Backing up..." else "Backup Library")
+            }
+            Button(
+                onClick = {
+                    backupRestoreLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+                },
+                enabled = !isBackingUp && !isRestoring && !isImporting
+            ) {
+                Text(if (isRestoring) "Restoring..." else "Restore Library")
+            }
+        }
+
         AudioLibraryScreen(
             assets = assets,
             categories = categories,
