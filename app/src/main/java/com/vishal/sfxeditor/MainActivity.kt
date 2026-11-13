@@ -10,7 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -20,9 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -375,15 +371,24 @@ fun SfxApp() {
                     override fun onComplete(file: File) {
                         Thread {
                             try {
-                                ctx.contentResolver.openOutputStream(dest)?.use { output ->
+                                val output = ctx.contentResolver.openOutputStream(dest)
+                                    ?: throw java.io.IOException("Could not open the selected save location")
+                                output.use { destinationStream ->
                                     FileInputStream(file).use { input ->
-                                        input.copyTo(output)
+                                        input.copyTo(destinationStream)
                                     }
                                 }
+                                val savedSize = ctx.contentResolver.openFileDescriptor(dest, "r")?.use {
+                                    it.statSize
+                                } ?: -1L
+                                if (savedSize == 0L) {
+                                    throw java.io.IOException("The saved MP4 is empty")
+                                }
+                                file.delete()
 
                                 (ctx as? ComponentActivity)?.runOnUiThread {
                                     exporting = false
-                                    status = "MP4 export complete"
+                                    status = "MP4 export complete${if (savedSize > 0L) " · ${savedSize / 1024} KB" else ""}"
                                 }
                             } catch (e: Exception) {
                                 (ctx as? ComponentActivity)?.runOnUiThread {
@@ -1362,118 +1367,6 @@ fun AssetCard(
 
 @OptIn(UnstableApi::class)
 @Composable
-private fun TimelineOverview(
-    durationMs: Long,
-    events: List<AudioEvent>
-) {
-    val safeDuration = durationMs.coerceAtLeast(1L)
-    val layers = events.map { it.layer }.distinct().sorted()
-    val laneCount = layers.size.coerceAtLeast(1)
-    val laneHeight = 30.dp
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = CardDeep),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            Text(
-                "VISUAL TIMELINE OVERVIEW",
-                color = PinkPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp
-            )
-            Text(
-                "${events.size} clips · ${laneCount} layers · ${(safeDuration / 1000f)}s",
-                color = TextMuted,
-                fontSize = 10.sp
-            )
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(laneHeight * laneCount.toFloat())
-            ) {
-                val lanePx = laneHeight.toPx()
-                val totalWidth = size.width.coerceAtLeast(1f)
-                layers.forEachIndexed { laneIndex, layer ->
-                    val top = laneIndex * lanePx
-                    drawRoundRect(
-                        color = Color(0xFF241522),
-                        topLeft = Offset(0f, top + 2f),
-                        size = Size(totalWidth, lanePx - 4f),
-                        cornerRadius = CornerRadius(7f, 7f)
-                    )
-                    events.filter { it.layer == layer }.forEach { event ->
-                        val left = (event.startMs.coerceAtLeast(0L).toDouble() / safeDuration) * totalWidth
-                        val right = (event.endMs.coerceAtMost(safeDuration).toDouble() / safeDuration) * totalWidth
-                        val clipWidth = (right - left).toFloat().coerceAtLeast(3f)
-                        val topInset = top + 6f
-                        val clipHeight = lanePx - 12f
-                        val tint = when (Math.floorMod(layer, 3)) {
-                            0 -> PinkPrimary
-                            1 -> Lavender
-                            else -> PinkSoft
-                        }
-                        drawRoundRect(
-                            color = tint.copy(alpha = 0.88f),
-                            topLeft = Offset(left.toFloat().coerceIn(0f, totalWidth - 1f), topInset),
-                            size = Size(clipWidth.coerceAtMost(totalWidth), clipHeight),
-                            cornerRadius = CornerRadius(5f, 5f)
-                        )
-                        if (event.fadeInMs > 0L) {
-                            val fadeWidth = (event.fadeInMs.toDouble() / safeDuration * totalWidth).toFloat()
-                            drawRoundRect(
-                                color = Color.White.copy(alpha = 0.35f),
-                                topLeft = Offset(left.toFloat().coerceIn(0f, totalWidth - 1f), topInset),
-                                size = Size(fadeWidth.coerceAtMost(clipWidth), clipHeight),
-                                cornerRadius = CornerRadius(5f, 5f)
-                            )
-                        }
-                        if (event.fadeOutMs > 0L) {
-                            val fadeWidth = (event.fadeOutMs.toDouble() / safeDuration * totalWidth).toFloat()
-                            drawRoundRect(
-                                color = Color.Black.copy(alpha = 0.28f),
-                                topLeft = Offset((right.toFloat() - fadeWidth).coerceAtLeast(0f), topInset),
-                                size = Size(fadeWidth.coerceAtMost(clipWidth), clipHeight),
-                                cornerRadius = CornerRadius(5f, 5f)
-                            )
-                        }
-                    }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                layers.forEach { layer ->
-                    val tint = when (Math.floorMod(layer, 3)) {
-                        0 -> PinkPrimary
-                        1 -> Lavender
-                        else -> PinkSoft
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.size(8.dp).padding(0.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            androidx.compose.foundation.Canvas(Modifier.size(8.dp)) {
-                                drawCircle(tint)
-                            }
-                        }
-                        Spacer(Modifier.width(4.dp))
-                        Text("L$layer", color = TextMuted, fontSize = 9.sp)
-                    }
-                }
-            }
-            Text(
-                "Clip position and length are proportional to project time. Light/dark edges indicate fade regions.",
-                color = TextMuted,
-                fontSize = 9.sp
-            )
-        }
-    }
-}
-
-@Composable
 fun TimelinePage(
     mod: Modifier,
     ctx: android.content.Context,
@@ -1614,15 +1507,6 @@ fun TimelinePage(
                     "TIMELINE EVENTS",
                     color = PinkPrimary,
                     fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        if (project != null && events.isNotEmpty()) {
-            item {
-                TimelineOverview(
-                    durationMs = project.durationMs,
-                    events = events
                 )
             }
         }
