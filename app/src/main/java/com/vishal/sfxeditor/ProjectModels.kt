@@ -3,7 +3,7 @@ package com.vishal.sfxeditor
 import android.net.Uri
 import org.json.JSONObject
 
-data class AssetSlot(val id:String,val filename:String,val type:String,val description:String,val required:Boolean,val searchPhrase:String="",val sourceName:String="",val sourceUrl:String="",val uri:Uri?=null)
+data class AssetSlot(val id:String,val filename:String,val type:String,val description:String,val required:Boolean,val searchPhrase:String="",val sourceName:String="",val sourceUrl:String="",val uri:Uri?=null,val libraryAssetId:String?=null,val libraryCategoryId:String?=null)
 data class AudioEvent(val id:String,val assetId:String,val startMs:Long,val endMs:Long,val durationMs:Long,val layer:Int,val volume:Float,val fadeInMs:Long,val fadeOutMs:Long,val pan:Float,val visualAction:String,val reason:String)
 data class SfxProject(val name:String,val durationMs:Long,val fps:Double,val preserveOriginalAudio:Boolean,val assets:List<AssetSlot>,val events:List<AudioEvent>)
 object ProjectParser {
