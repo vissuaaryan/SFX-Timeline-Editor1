@@ -26,6 +26,9 @@ fun AudioLibraryScreen(
     onPlay: (AudioAssetEntity) -> Unit,
     onPause: () -> Unit,
     onFavorite: (AudioAssetEntity) -> Unit,
+    onRenameAsset: (AudioAssetEntity, String) -> Unit,
+    onDeleteAsset: (AudioAssetEntity) -> Unit,
+    onMoveAsset: (AudioAssetEntity, String?) -> Unit,
     onAddCategory: (String, String, String?) -> Unit,
     onRenameCategory: (AudioCategoryEntity, String) -> Unit,
     onDeleteCategory: (AudioCategoryEntity) -> Unit
@@ -42,6 +45,11 @@ fun AudioLibraryScreen(
     var dialogMode by remember { mutableStateOf<String?>(null) }
     var categoryName by remember { mutableStateOf("") }
     var parentCategoryId by remember { mutableStateOf<String?>(null) }
+
+    var activeAsset by remember { mutableStateOf<AudioAssetEntity?>(null) }
+    var assetMenuExpanded by remember { mutableStateOf(false) }
+    var assetName by remember { mutableStateOf("") }
+    var moveCategoryId by remember { mutableStateOf<String?>(null) }
 
     val typeCategories = categories.filter {
         it.assetType == selectedType.name
@@ -349,6 +357,12 @@ fun AudioLibraryScreen(
                                         color = Color(0xFF80CFFF),
                                         style = MaterialTheme.typography.labelSmall
                                     )
+                                } else {
+                                    Text(
+                                        "Uncategorized",
+                                        color = Color.LightGray,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
                                 }
 
                                 if (asset.missingOnDisk) {
@@ -399,11 +413,177 @@ fun AudioLibraryScreen(
                                     tint = Color.White
                                 )
                             }
+
+                            Box {
+                                IconButton(
+                                    onClick = {
+                                        activeAsset = asset
+                                        assetMenuExpanded = true
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.MoreVert,
+                                        contentDescription = "Audio options",
+                                        tint = Color.White
+                                    )
+                                }
+
+                                DropdownMenu(
+                                    expanded = assetMenuExpanded &&
+                                        activeAsset?.id == asset.id,
+                                    onDismissRequest = {
+                                        assetMenuExpanded = false
+                                    }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Rename") },
+                                        onClick = {
+                                            assetName = asset.fileName
+                                            assetMenuExpanded = false
+                                            dialogMode = "renameAsset"
+                                        }
+                                    )
+
+                                    DropdownMenuItem(
+                                        text = { Text("Move to category") },
+                                        onClick = {
+                                            moveCategoryId = asset.categoryId
+                                            assetMenuExpanded = false
+                                            dialogMode = "moveAsset"
+                                        }
+                                    )
+
+                                    DropdownMenuItem(
+                                        text = { Text("Delete audio") },
+                                        onClick = {
+                                            assetMenuExpanded = false
+                                            dialogMode = "deleteAsset"
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (dialogMode == "renameAsset" && activeAsset != null) {
+        AlertDialog(
+            onDismissRequest = { dialogMode = null },
+            title = { Text("Rename audio file") },
+            text = {
+                OutlinedTextField(
+                    value = assetName,
+                    onValueChange = { assetName = it },
+                    singleLine = true,
+                    label = { Text("File name") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = assetName.isNotBlank(),
+                    onClick = {
+                        activeAsset?.let {
+                            onRenameAsset(it, assetName.trim())
+                        }
+                        dialogMode = null
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialogMode = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (dialogMode == "moveAsset" && activeAsset != null) {
+        AlertDialog(
+            onDismissRequest = { dialogMode = null },
+            title = { Text("Move audio to category") },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    TextButton(
+                        onClick = { moveCategoryId = null }
+                    ) {
+                        Text(
+                            if (moveCategoryId == null) {
+                                "✓ Uncategorized"
+                            } else {
+                                "Uncategorized"
+                            }
+                        )
+                    }
+
+                    typeCategories.forEach { category ->
+                        TextButton(
+                            onClick = {
+                                moveCategoryId = category.id
+                            }
+                        ) {
+                            Text(
+                                (if (moveCategoryId == category.id) "✓ " else "") +
+                                    categoryLabel(category, typeCategories)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        activeAsset?.let {
+                            onMoveAsset(it, moveCategoryId)
+                        }
+                        dialogMode = null
+                    }
+                ) {
+                    Text("Move")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialogMode = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (dialogMode == "deleteAsset" && activeAsset != null) {
+        AlertDialog(
+            onDismissRequest = { dialogMode = null },
+            title = { Text("Delete audio file?") },
+            text = {
+                Text(
+                    "This permanently deletes the imported copy of " +
+                        activeAsset!!.fileName +
+                        " from this app. Your original source file is not affected."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        activeAsset?.let { onDeleteAsset(it) }
+                        dialogMode = null
+                        activeAsset = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialogMode = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (dialogMode == "add" || dialogMode == "rename") {
