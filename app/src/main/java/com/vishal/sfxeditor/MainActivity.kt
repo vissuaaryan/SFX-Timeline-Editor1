@@ -67,6 +67,24 @@ fun displayName(
     } ?: (u.lastPathSegment ?: "file")
 }
 
+
+private fun isAssetUriAvailable(
+    context: android.content.Context,
+    uri: Uri?
+): Boolean {
+    if (uri == null) return false
+    return try {
+        when (uri.scheme?.lowercase()) {
+            "file" -> uri.path?.let { File(it).isFile } == true
+            "content" -> context.contentResolver.openAssetFileDescriptor(uri, "r")
+                ?.use { true } ?: false
+            else -> false
+        }
+    } catch (_: Exception) {
+        false
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -152,7 +170,67 @@ fun SfxApp() {
         videoName = item.videoName
         activeSavedId = item.id
         page = "timeline"
-        status = "Project loaded. Changes are autosaved automatically."
+        status = "Project loaded. Checking missing audio links..."
+
+        // Restore private-library file URIs after reinstall, restore, or a moved
+        // library file. Prefer the stable library ID; use exact filename + type
+        // only for older projects that do not have a stored library ID.
+        appScope.launch {
+            val dao = LibraryDatabase.getDatabase(ctx).libraryDao()
+            val allLibraryAssets = runCatching { dao.getAllAssets().first() }
+                .getOrDefault(emptyList())
+            val audioRoot = runCatching {
+                File(ctx.filesDir, "audio").canonicalFile
+            }.getOrNull()
+
+            val repaired = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                item.assets.map { slot ->
+                    if (isAssetUriAvailable(ctx, slot.uri)) {
+                        slot
+                    } else {
+                        val expectedType = if (slot.type.contains("music", true)) "MUSIC" else "SFX"
+                        val libraryAsset = slot.libraryAssetId
+                            ?.let { id -> runCatching { dao.getAssetById(id) }.getOrNull() }
+                            ?: allLibraryAssets.firstOrNull {
+                                it.assetType.equals(expectedType, true) &&
+                                    it.fileName.equals(slot.filename, true)
+                            }
+
+                        val candidate = libraryAsset?.let {
+                            runCatching {
+                                File(ctx.filesDir, it.relativePath).canonicalFile
+                            }.getOrNull()
+                        }
+
+                        if (
+                            libraryAsset != null &&
+                            candidate != null &&
+                            audioRoot != null &&
+                            candidate.path.startsWith(audioRoot.path + File.separator) &&
+                            candidate.isFile
+                        ) {
+                            slot.copy(
+                                uri = Uri.fromFile(candidate),
+                                libraryAssetId = libraryAsset.id,
+                                libraryCategoryId = libraryAsset.categoryId
+                            )
+                        } else {
+                            slot.copy(uri = null)
+                        }
+                    }
+                }
+            }
+
+            assets = repaired
+            project = project?.copy(assets = repaired)
+            val restoredCount = repaired.count { isAssetUriAvailable(ctx, it.uri) }
+            val missingCount = repaired.size - restoredCount
+            status = if (missingCount == 0) {
+                "Project loaded. All audio links are available."
+            } else {
+                "$restoredCount audio links restored · $missingCount still missing. Use Relink from Library."
+            }
+        }
     }
 
     fun persist(uri: Uri) {
@@ -1179,8 +1257,8 @@ fun AssetCard(
                 }
 
                 Text(
-                    if (a.uri != null) "ADDED" else "MISSING",
-                    color = if (a.uri != null) {
+                    if (isAssetUriAvailable(ctx, a.uri)) "ADDED" else "MISSING",
+                    color = if (isAssetUriAvailable(ctx, a.uri)) {
                         PinkPrimary
                     } else {
                         WarningPink
@@ -1216,7 +1294,7 @@ fun AssetCard(
                 Spacer(Modifier.weight(1f))
 
                 TextButton(onClick = onPick) {
-                    Text(if (a.uri != null) "Replace" else "Upload")
+                    Text(if (isAssetUriAvailable(ctx, a.uri)) "Replace" else "Relink")
                 }
             }
 
@@ -1386,7 +1464,13 @@ fun TimelinePage(
                 ) {
                     Icon(Icons.Default.SwapHoriz, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Replace from Library")
+                    Text(
+                        if (isAssetUriAvailable(ctx, asset.uri)) {
+                            "Replace from Library"
+                        } else {
+                            "Relink from Library"
+                        }
+                    )
                 }
             }
         }
