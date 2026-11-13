@@ -31,12 +31,17 @@ fun AudioLibraryScreen(
     onMoveAsset: (AudioAssetEntity, String?) -> Unit,
     onAddCategory: (String, String, String?) -> Unit,
     onRenameCategory: (AudioCategoryEntity, String) -> Unit,
-    onDeleteCategory: (AudioCategoryEntity) -> Unit
+    onDeleteCategory: (AudioCategoryEntity) -> Unit,
+    selectionMode: Boolean = false,
+    initialCategoryId: String? = null,
+    onSelectAsset: (AudioAssetEntity) -> Unit = {}
 ) {
     var selectedType by remember { mutableStateOf(AudioType.SFX) }
     var search by remember { mutableStateOf("") }
     var favoritesOnly by remember { mutableStateOf(false) }
-    var selectedCategoryId by remember { mutableStateOf<String?>(null) }
+    var selectedCategoryId by remember(initialCategoryId) {
+        mutableStateOf(initialCategoryId)
+    }
 
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var actionMenuExpanded by remember { mutableStateOf(false) }
@@ -59,10 +64,29 @@ fun AudioLibraryScreen(
         it.id == selectedCategoryId
     }
 
+    // Include the selected folder and every nested subfolder.
+    val visibleCategoryIds = remember(selectedCategoryId, typeCategories) {
+        if (selectedCategoryId == null) {
+            emptySet()
+        } else {
+            val found = linkedSetOf(selectedCategoryId!!)
+            var changed = true
+            while (changed) {
+                changed = false
+                typeCategories.forEach { category ->
+                    if (category.parentId in found && found.add(category.id)) {
+                        changed = true
+                    }
+                }
+            }
+            found
+        }
+    }
+
     val filteredAssets = assets.filter { asset ->
         asset.assetType == selectedType.name &&
             (selectedCategoryId == null ||
-                asset.categoryId == selectedCategoryId) &&
+                asset.categoryId in visibleCategoryIds) &&
             asset.fileName.contains(search, ignoreCase = true) &&
             (!favoritesOnly || asset.isFavorite)
     }
@@ -73,10 +97,18 @@ fun AudioLibraryScreen(
             .padding(16.dp)
     ) {
         Text(
-            "AUDIO LIBRARY",
+            if (selectionMode) "REPLACE AUDIO FROM LIBRARY" else "AUDIO LIBRARY",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
+
+        if (selectionMode) {
+            Text(
+                "Choose an audio file. Nested subfolders are included in the selected folder.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
 
         Spacer(Modifier.height(12.dp))
 
@@ -385,6 +417,15 @@ fun AudioLibraryScreen(
                                     contentDescription = "Favorite",
                                     tint = Color(0xFF69E7B9)
                                 )
+                            }
+
+                            if (selectionMode) {
+                                TextButton(
+                                    onClick = { onSelectAsset(asset) },
+                                    enabled = !asset.missingOnDisk
+                                ) {
+                                    Text("Select")
+                                }
                             }
 
                             IconButton(
