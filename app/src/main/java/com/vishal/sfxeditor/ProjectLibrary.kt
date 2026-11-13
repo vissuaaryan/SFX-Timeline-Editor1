@@ -20,7 +20,12 @@ object ProjectLibrary {
     private const val PREFS = "sfx_project_library"
     private const val KEY = "projects"
 
-    fun load(context: Context): List<SavedProject> {
+    /** Normal project list; the reserved recovery checkpoint is hidden. */
+    fun load(context: Context): List<SavedProject> =
+        loadAll(context).filterNot { it.id == ProjectRecoveryManager.RECOVERY_ID }
+
+    /** Internal complete list including the recovery checkpoint. */
+    private fun loadAll(context: Context): List<SavedProject> {
         return try {
             val array = JSONArray(
                 context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -37,7 +42,7 @@ object ProjectLibrary {
     }
 
     fun upsert(context: Context, item: SavedProject) {
-        val all = load(context)
+        val all = loadAll(context)
             .filterNot { it.id == item.id }
             .toMutableList()
         all.add(item)
@@ -45,7 +50,7 @@ object ProjectLibrary {
     }
 
     fun delete(context: Context, id: String) {
-        persist(context, load(context).filterNot { it.id == id })
+        persist(context, loadAll(context).filterNot { it.id == id })
     }
 
     /**
