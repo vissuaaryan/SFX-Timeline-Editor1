@@ -627,7 +627,7 @@ fun SfxApp() {
                                 )
 
                                 Text(
-                                    "Saved projects stay on this device. Open one to continue editing.",
+                                    "${savedProjects.size} saved projects · sorted by most recently modified",
                                     color = TextMuted,
                                     fontSize = 12.sp
                                 )
@@ -635,6 +635,23 @@ fun SfxApp() {
 
                             item {
                                 Button(
+                                    onClick = {
+                                        raw = ""
+                                        page = "import"
+                                        status = "New project: select the original video and import its AI JSON."
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = null
+                                    )
+                                    Text("Create New Project")
+                                }
+                            }
+
+                            item {
+                                OutlinedButton(
                                     onClick = {
                                         savedProjects = ProjectLibrary.load(ctx)
                                     },
@@ -644,7 +661,7 @@ fun SfxApp() {
                                         Icons.Default.Refresh,
                                         contentDescription = null
                                     )
-                                    Text("Refresh")
+                                    Text("Refresh Projects")
                                 }
                             }
 
@@ -694,7 +711,7 @@ fun SfxApp() {
                                         )
 
                                         Text(
-                                            "Saved: ${
+                                            "Last modified: ${
                                                 java.text.DateFormat
                                                     .getDateTimeInstance()
                                                     .format(java.util.Date(saved.savedAt))
@@ -1485,13 +1502,16 @@ fun TimelinePage(
             }
         }
 
-        items(events) { e ->
+        items(events, key = { it.id }) { e ->
+            var startInput by remember(e.id, e.startMs) { mutableStateOf(e.startMs.toString()) }
+            var endInput by remember(e.id, e.endMs) { mutableStateOf(e.endMs.toString()) }
+            var timingError by remember(e.id) { mutableStateOf<String?>(null) }
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = CardDeep
                 )
             ) {
-                Column(Modifier.padding(12.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
 
                     Text(
                         "${e.id} · ${
@@ -1515,36 +1535,202 @@ fun TimelinePage(
                         fontSize = 10.sp
                     )
 
+                    Text("EDIT CLIP TIMING (milliseconds)", color = PinkPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = startInput,
+                            onValueChange = { value -> startInput = value.filter { it.isDigit() }.take(12) },
+                            label = { Text("Start ms") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = endInput,
+                            onValueChange = { value -> endInput = value.filter { it.isDigit() }.take(12) },
+                            label = { Text("End ms") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(
+                            onClick = {
+                                val start = startInput.toLongOrNull()
+                                val end = endInput.toLongOrNull()
+                                val durationLimit = project?.durationMs ?: Long.MAX_VALUE
+                                if (start == null || end == null || start < 0L || end <= start || end > durationLimit) {
+                                    timingError = "Use 0 ≤ start < end ≤ video duration"
+                                } else {
+                                    val newDuration = end - start
+                                    onEvents(events.map { current ->
+                                        if (current.id == e.id) current.copy(
+                                            startMs = start,
+                                            endMs = end,
+                                            durationMs = newDuration,
+                                            fadeInMs = current.fadeInMs.coerceAtMost(newDuration),
+                                            fadeOutMs = current.fadeOutMs.coerceAtMost((newDuration - current.fadeInMs.coerceAtMost(newDuration)).coerceAtLeast(0L))
+                                        ) else current
+                                    })
+                                    timingError = null
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) { Text("Apply") }
+                    }
+                    if (timingError != null) {
+                        Text(timingError ?: "Invalid timing", color = WarningPink, fontSize = 10.sp)
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             "Volume",
                             color = TextMuted,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            modifier = Modifier.width(54.dp)
                         )
 
                         Slider(
-                            value = e.volume,
+                            value = e.volume.coerceIn(0f, 1f),
                             onValueChange = { v ->
-                                onEvents(
-                                    events.map {
-                                        if (it.id == e.id) {
-                                            it.copy(volume = v)
-                                        } else {
-                                            it
-                                        }
-                                    }
-                                )
+                                onEvents(events.map { current ->
+                                    if (current.id == e.id) current.copy(volume = v) else current
+                                })
                             },
+                            valueRange = 0f..1f,
                             modifier = Modifier.weight(1f)
                         )
 
                         Text(
                             "${(e.volume * 100).toInt()}%",
                             color = TextMain,
-                            fontSize = 10.sp
+                            fontSize = 10.sp,
+                            modifier = Modifier.width(36.dp)
                         )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Pan",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.width(54.dp)
+                        )
+
+                        Slider(
+                            value = e.pan.coerceIn(-1f, 1f),
+                            onValueChange = { v ->
+                                onEvents(events.map { current ->
+                                    if (current.id == e.id) current.copy(pan = v) else current
+                                })
+                            },
+                            valueRange = -1f..1f,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Text(
+                            when {
+                                e.pan < -0.05f -> "L ${(kotlin.math.abs(e.pan) * 100).toInt()}%"
+                                e.pan > 0.05f -> "R ${(e.pan * 100).toInt()}%"
+                                else -> "C"
+                            },
+                            color = TextMain,
+                            fontSize = 10.sp,
+                            modifier = Modifier.width(36.dp)
+                        )
+                    }
+
+                    val maxFadeIn = (e.durationMs / 2L).coerceAtLeast(0L)
+                    val maxFadeOut = (e.durationMs - e.fadeInMs).coerceAtLeast(0L)
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Fade in",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.width(54.dp)
+                        )
+
+                        Slider(
+                            value = e.fadeInMs.coerceIn(0L, maxFadeIn).toFloat(),
+                            onValueChange = { v ->
+                                val newFadeIn = v.toLong()
+                                onEvents(events.map { current ->
+                                    if (current.id == e.id) {
+                                        current.copy(
+                                            fadeInMs = newFadeIn,
+                                            fadeOutMs = current.fadeOutMs.coerceAtMost(
+                                                (current.durationMs - newFadeIn).coerceAtLeast(0L)
+                                            )
+                                        )
+                                    } else current
+                                })
+                            },
+                            valueRange = 0f..maxFadeIn.coerceAtLeast(1L).toFloat(),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Text(
+                            "${e.fadeInMs / 1000f}s",
+                            color = TextMain,
+                            fontSize = 10.sp,
+                            modifier = Modifier.width(36.dp)
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Fade out",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.width(54.dp)
+                        )
+
+                        Slider(
+                            value = e.fadeOutMs.coerceIn(0L, maxFadeOut).toFloat(),
+                            onValueChange = { v ->
+                                val newFadeOut = v.toLong()
+                                onEvents(events.map { current ->
+                                    if (current.id == e.id) {
+                                        current.copy(
+                                            fadeOutMs = newFadeOut.coerceAtMost(
+                                                (current.durationMs - current.fadeInMs).coerceAtLeast(0L)
+                                            )
+                                        )
+                                    } else current
+                                })
+                            },
+                            valueRange = 0f..maxFadeOut.coerceAtLeast(1L).toFloat(),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Text(
+                            "${e.fadeOutMs / 1000f}s",
+                            color = TextMain,
+                            fontSize = 10.sp,
+                            modifier = Modifier.width(36.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = {
+                            onEvents(events.filterNot { it.id == e.id })
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = null)
+                            Text("Remove clip")
+                        }
                     }
                 }
             }
@@ -1613,7 +1799,7 @@ fun TimelinePage(
             )
 
             Text(
-                "Renderer uses AndroidX Media3 Composition to mix the source video and synchronized audio sequences. Crossfades between tracks are not supported by Media3 Composition; fade envelopes on individual clips are applied.",
+                "Each event is an independently synchronized audio clip. Set Fade Out on the outgoing clip and Fade In on the incoming clip to create an overlapping crossfade. Volume, pan and clip timing are editable per event.",
                 color = TextMuted,
                 fontSize = 10.sp
             )
