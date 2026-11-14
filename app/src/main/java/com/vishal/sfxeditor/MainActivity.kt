@@ -67,24 +67,6 @@ fun displayName(
     } ?: (u.lastPathSegment ?: "file")
 }
 
-
-private fun isAssetUriAvailable(
-    context: android.content.Context,
-    uri: Uri?
-): Boolean {
-    if (uri == null) return false
-    return try {
-        when (uri.scheme?.lowercase()) {
-            "file" -> uri.path?.let { File(it).isFile } == true
-            "content" -> context.contentResolver.openAssetFileDescriptor(uri, "r")
-                ?.use { true } ?: false
-            else -> false
-        }
-    } catch (_: Exception) {
-        false
-    }
-}
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,6 +85,9 @@ fun SfxApp() {
     var page by remember { mutableStateOf("home") }
     var logicutCode by remember { mutableStateOf("") }
     var prompt by remember { mutableStateOf("") }
+    var promptPreview by remember { mutableStateOf("") }
+    var promptAssetCount by remember { mutableIntStateOf(0) }
+    var savingPrompt by remember { mutableStateOf(false) }
 
     var raw by remember { mutableStateOf("") }
     var savedProjects by remember {
@@ -170,67 +155,7 @@ fun SfxApp() {
         videoName = item.videoName
         activeSavedId = item.id
         page = "timeline"
-        status = "Project loaded. Checking missing audio links..."
-
-        // Restore private-library file URIs after reinstall, restore, or a moved
-        // library file. Prefer the stable library ID; use exact filename + type
-        // only for older projects that do not have a stored library ID.
-        appScope.launch {
-            val dao = LibraryDatabase.getDatabase(ctx).libraryDao()
-            val allLibraryAssets = runCatching { dao.getAllAssets().first() }
-                .getOrDefault(emptyList())
-            val audioRoot = runCatching {
-                File(ctx.filesDir, "audio").canonicalFile
-            }.getOrNull()
-
-            val repaired = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                item.assets.map { slot ->
-                    if (isAssetUriAvailable(ctx, slot.uri)) {
-                        slot
-                    } else {
-                        val expectedType = if (slot.type.contains("music", true)) "MUSIC" else "SFX"
-                        val libraryAsset = slot.libraryAssetId
-                            ?.let { id -> runCatching { dao.getAssetById(id) }.getOrNull() }
-                            ?: allLibraryAssets.firstOrNull {
-                                it.assetType.equals(expectedType, true) &&
-                                    it.fileName.equals(slot.filename, true)
-                            }
-
-                        val candidate = libraryAsset?.let {
-                            runCatching {
-                                File(ctx.filesDir, it.relativePath).canonicalFile
-                            }.getOrNull()
-                        }
-
-                        if (
-                            libraryAsset != null &&
-                            candidate != null &&
-                            audioRoot != null &&
-                            candidate.path.startsWith(audioRoot.path + File.separator) &&
-                            candidate.isFile
-                        ) {
-                            slot.copy(
-                                uri = Uri.fromFile(candidate),
-                                libraryAssetId = libraryAsset.id,
-                                libraryCategoryId = libraryAsset.categoryId
-                            )
-                        } else {
-                            slot.copy(uri = null)
-                        }
-                    }
-                }
-            }
-
-            assets = repaired
-            project = project?.copy(assets = repaired)
-            val restoredCount = repaired.count { isAssetUriAvailable(ctx, it.uri) }
-            val missingCount = repaired.size - restoredCount
-            status = if (missingCount == 0) {
-                "Project loaded. All audio links are available."
-            } else {
-                "$restoredCount audio links restored · $missingCount still missing. Use Relink from Library."
-            }
-        }
+        status = "Project loaded. Changes are autosaved automatically."
     }
 
     fun persist(uri: Uri) {
@@ -347,6 +272,29 @@ fun SfxApp() {
         }
     }
 
+    val promptSavePick = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { dest ->
+        val textToSave = prompt
+        if (dest != null && textToSave.isNotBlank()) {
+            appScope.launch {
+                savingPrompt = true
+                try {
+                    withContext(Dispatchers.IO) {
+                        ctx.contentResolver.openOutputStream(dest, "wt")?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+                            writer.write(textToSave)
+                        } ?: throw IllegalStateException("Could not open destination")
+                    }
+                    status = "Full prompt saved. Attach this TXT file to your AI chat."
+                } catch (error: Exception) {
+                    status = "Prompt save failed: ${error.message}"
+                } finally {
+                    savingPrompt = false
+                }
+            }
+        }
+    }
+
     val exportPick = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("video/mp4")
     ) { dest ->
@@ -371,24 +319,15 @@ fun SfxApp() {
                     override fun onComplete(file: File) {
                         Thread {
                             try {
-                                val output = ctx.contentResolver.openOutputStream(dest)
-                                    ?: throw java.io.IOException("Could not open the selected save location")
-                                output.use { destinationStream ->
+                                ctx.contentResolver.openOutputStream(dest)?.use { output ->
                                     FileInputStream(file).use { input ->
-                                        input.copyTo(destinationStream)
+                                        input.copyTo(output)
                                     }
                                 }
-                                val savedSize = ctx.contentResolver.openFileDescriptor(dest, "r")?.use {
-                                    it.statSize
-                                } ?: -1L
-                                if (savedSize == 0L) {
-                                    throw java.io.IOException("The saved MP4 is empty")
-                                }
-                                file.delete()
 
                                 (ctx as? ComponentActivity)?.runOnUiThread {
                                     exporting = false
-                                    status = "MP4 export complete${if (savedSize > 0L) " · ${savedSize / 1024} KB" else ""}"
+                                    status = "MP4 export complete"
                                 }
                             } catch (e: Exception) {
                                 (ctx as? ComponentActivity)?.runOnUiThread {
@@ -636,7 +575,7 @@ fun SfxApp() {
                                 )
 
                                 Text(
-                                    "${savedProjects.size} saved projects · sorted by most recently modified",
+                                    "Saved projects stay on this device. Open one to continue editing.",
                                     color = TextMuted,
                                     fontSize = 12.sp
                                 )
@@ -644,23 +583,6 @@ fun SfxApp() {
 
                             item {
                                 Button(
-                                    onClick = {
-                                        raw = ""
-                                        page = "import"
-                                        status = "New project: select the original video and import its AI JSON."
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(
-                                        Icons.Default.Add,
-                                        contentDescription = null
-                                    )
-                                    Text("Create New Project")
-                                }
-                            }
-
-                            item {
-                                OutlinedButton(
                                     onClick = {
                                         savedProjects = ProjectLibrary.load(ctx)
                                     },
@@ -670,7 +592,7 @@ fun SfxApp() {
                                         Icons.Default.Refresh,
                                         contentDescription = null
                                     )
-                                    Text("Refresh Projects")
+                                    Text("Refresh")
                                 }
                             }
 
@@ -720,7 +642,7 @@ fun SfxApp() {
                                         )
 
                                         Text(
-                                            "Last modified: ${
+                                            "Saved: ${
                                                 java.text.DateFormat
                                                     .getDateTimeInstance()
                                                     .format(java.util.Date(saved.savedAt))
@@ -834,26 +756,42 @@ fun SfxApp() {
                                 Button(
                                     onClick = {
                                         appScope.launch {
+                                            if (generatingPrompt) return@launch
+                                            generatingPrompt = true
+                                            prompt = ""
+                                            promptPreview = ""
+                                            status = "Preparing library manifest in background..."
                                             try {
-                                                status = "Reading offline SFX & Music Library..."
-                                                val dao = LibraryDatabase.getDatabase(ctx).libraryDao()
-                                                val libraryAssets = dao.getAllAssets().first()
-                                                val libraryCategories = dao.getAllCategories().first()
-                                                val manifest = LibraryManifestBuilder.build(
-                                                    assets = libraryAssets,
-                                                    categories = libraryCategories
-                                                ).toString(2)
-                                                prompt = MasterPrompt.build(
-                                                    logicutCode = logicutCode,
-                                                    libraryManifest = manifest
-                                                )
-                                                status = "Prompt generated with ${libraryAssets.size} Library assets and ${libraryCategories.size} folders"
+                                                val (generated, count, folderCount) = withContext(Dispatchers.IO) {
+                                                    val dao = LibraryDatabase.getDatabase(ctx).libraryDao()
+                                                    val libraryAssets = dao.getAllAssets().first()
+                                                    val libraryCategories = dao.getAllCategories().first()
+                                                    val manifest = LibraryManifestBuilder.build(
+                                                        assets = libraryAssets,
+                                                        categories = libraryCategories
+                                                    ).toString()
+                                                    Triple(
+                                                        MasterPrompt.build(
+                                                            logicutCode = logicutCode,
+                                                            libraryManifest = manifest
+                                                        ),
+                                                        libraryAssets.size,
+                                                        libraryCategories.size
+                                                    )
+                                                }
+                                                prompt = generated
+                                                promptPreview = generated.take(1400)
+                                                promptAssetCount = count
+                                                status = "Ready: $count assets, $folderCount folders. Full prompt is kept out of the screen preview to prevent UI freezes."
                                             } catch (error: Exception) {
-                                                status = "Could not read Library: ${error.message}"
+                                                status = "Could not generate prompt: ${error.message ?: error.javaClass.simpleName}"
+                                            } finally {
+                                                generatingPrompt = false
                                             }
                                         }
                                     },
-                                    enabled = logicutCode.contains("[RECIPE]") &&
+                                    enabled = !generatingPrompt &&
+                                        logicutCode.contains("[RECIPE]") &&
                                         logicutCode.contains("[ASSETS]"),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
@@ -861,32 +799,61 @@ fun SfxApp() {
                                         Icons.Default.AutoAwesome,
                                         contentDescription = null
                                     )
-                                    Text("Generate SFX Analysis Prompt")
+                                    Text(if (generatingPrompt) "Preparing Library..." else "Generate SFX Analysis Prompt")
+                                }
+                            }
+
+                            if (generatingPrompt) {
+                                item {
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                    Text("Processing library in background. Keep the app open until it finishes.", color = TextMuted, fontSize = 12.sp)
                                 }
                             }
 
                             if (prompt.isNotBlank()) {
                                 item {
+                                    Text(
+                                        "READY · $promptAssetCount LIBRARY ASSETS",
+                                        color = PinkPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "Preview only (first 1,400 characters). The complete prompt stays in memory and will be saved as a TXT file, so Compose does not try to render thousands of asset records.",
+                                        color = TextMuted,
+                                        fontSize = 12.sp
+                                    )
                                     OutlinedTextField(
-                                        value = prompt,
+                                        value = promptPreview,
                                         onValueChange = {},
                                         modifier = Modifier.fillMaxWidth(),
-                                        minLines = 9,
+                                        minLines = 6,
+                                        maxLines = 8,
                                         readOnly = true
                                     )
-
                                     Button(
                                         onClick = {
-                                            copyText(ctx, prompt)
-                                            status = "Prompt copied"
+                                            promptSavePick.launch("SFX_Analysis_Prompt_${promptAssetCount}_assets.txt")
                                         },
+                                        enabled = !savingPrompt,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Icon(
-                                            Icons.Default.ContentCopy,
-                                            contentDescription = null
-                                        )
-                                        Text("Copy Prompt")
+                                        Icon(Icons.Default.Save, contentDescription = null)
+                                        Text(if (savingPrompt) "Saving Full Prompt..." else "Save Full Prompt as TXT")
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (prompt.length <= 200_000) {
+                                                copyText(ctx, prompt)
+                                                status = "Full prompt copied"
+                                            } else {
+                                                status = "Large prompt: use Save Full Prompt as TXT and attach the file. Clipboard copy is disabled for stability."
+                                            }
+                                        },
+                                        enabled = prompt.length <= 200_000,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null)
+                                        Text("Copy Full Prompt (small prompts only)")
                                     }
                                 }
                             }
@@ -1283,8 +1250,8 @@ fun AssetCard(
                 }
 
                 Text(
-                    if (isAssetUriAvailable(ctx, a.uri)) "ADDED" else "MISSING",
-                    color = if (isAssetUriAvailable(ctx, a.uri)) {
+                    if (a.uri != null) "ADDED" else "MISSING",
+                    color = if (a.uri != null) {
                         PinkPrimary
                     } else {
                         WarningPink
@@ -1320,7 +1287,7 @@ fun AssetCard(
                 Spacer(Modifier.weight(1f))
 
                 TextButton(onClick = onPick) {
-                    Text(if (isAssetUriAvailable(ctx, a.uri)) "Replace" else "Relink")
+                    Text(if (a.uri != null) "Replace" else "Upload")
                 }
             }
 
@@ -1490,13 +1457,7 @@ fun TimelinePage(
                 ) {
                     Icon(Icons.Default.SwapHoriz, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (isAssetUriAvailable(ctx, asset.uri)) {
-                            "Replace from Library"
-                        } else {
-                            "Relink from Library"
-                        }
-                    )
+                    Text("Replace from Library")
                 }
             }
         }
@@ -1511,16 +1472,13 @@ fun TimelinePage(
             }
         }
 
-        items(events, key = { it.id }) { e ->
-            var startInput by remember(e.id, e.startMs) { mutableStateOf(e.startMs.toString()) }
-            var endInput by remember(e.id, e.endMs) { mutableStateOf(e.endMs.toString()) }
-            var timingError by remember(e.id) { mutableStateOf<String?>(null) }
+        items(events) { e ->
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = CardDeep
                 )
             ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(Modifier.padding(12.dp)) {
 
                     Text(
                         "${e.id} · ${
@@ -1544,202 +1502,36 @@ fun TimelinePage(
                         fontSize = 10.sp
                     )
 
-                    Text("EDIT CLIP TIMING (milliseconds)", color = PinkPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = startInput,
-                            onValueChange = { value -> startInput = value.filter { it.isDigit() }.take(12) },
-                            label = { Text("Start ms") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = endInput,
-                            onValueChange = { value -> endInput = value.filter { it.isDigit() }.take(12) },
-                            label = { Text("End ms") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            onClick = {
-                                val start = startInput.toLongOrNull()
-                                val end = endInput.toLongOrNull()
-                                val durationLimit = project?.durationMs ?: Long.MAX_VALUE
-                                if (start == null || end == null || start < 0L || end <= start || end > durationLimit) {
-                                    timingError = "Use 0 ≤ start < end ≤ video duration"
-                                } else {
-                                    val newDuration = end - start
-                                    onEvents(events.map { current ->
-                                        if (current.id == e.id) current.copy(
-                                            startMs = start,
-                                            endMs = end,
-                                            durationMs = newDuration,
-                                            fadeInMs = current.fadeInMs.coerceAtMost(newDuration),
-                                            fadeOutMs = current.fadeOutMs.coerceAtMost((newDuration - current.fadeInMs.coerceAtMost(newDuration)).coerceAtLeast(0L))
-                                        ) else current
-                                    })
-                                    timingError = null
-                                }
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) { Text("Apply") }
-                    }
-                    if (timingError != null) {
-                        Text(timingError ?: "Invalid timing", color = WarningPink, fontSize = 10.sp)
-                    }
-
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             "Volume",
                             color = TextMuted,
-                            fontSize = 11.sp,
-                            modifier = Modifier.width(54.dp)
+                            fontSize = 11.sp
                         )
 
                         Slider(
-                            value = e.volume.coerceIn(0f, 1f),
+                            value = e.volume,
                             onValueChange = { v ->
-                                onEvents(events.map { current ->
-                                    if (current.id == e.id) current.copy(volume = v) else current
-                                })
+                                onEvents(
+                                    events.map {
+                                        if (it.id == e.id) {
+                                            it.copy(volume = v)
+                                        } else {
+                                            it
+                                        }
+                                    }
+                                )
                             },
-                            valueRange = 0f..1f,
                             modifier = Modifier.weight(1f)
                         )
 
                         Text(
                             "${(e.volume * 100).toInt()}%",
                             color = TextMain,
-                            fontSize = 10.sp,
-                            modifier = Modifier.width(36.dp)
+                            fontSize = 10.sp
                         )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Pan",
-                            color = TextMuted,
-                            fontSize = 11.sp,
-                            modifier = Modifier.width(54.dp)
-                        )
-
-                        Slider(
-                            value = e.pan.coerceIn(-1f, 1f),
-                            onValueChange = { v ->
-                                onEvents(events.map { current ->
-                                    if (current.id == e.id) current.copy(pan = v) else current
-                                })
-                            },
-                            valueRange = -1f..1f,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Text(
-                            when {
-                                e.pan < -0.05f -> "L ${(kotlin.math.abs(e.pan) * 100).toInt()}%"
-                                e.pan > 0.05f -> "R ${(e.pan * 100).toInt()}%"
-                                else -> "C"
-                            },
-                            color = TextMain,
-                            fontSize = 10.sp,
-                            modifier = Modifier.width(36.dp)
-                        )
-                    }
-
-                    val maxFadeIn = (e.durationMs / 2L).coerceAtLeast(0L)
-                    val maxFadeOut = (e.durationMs - e.fadeInMs).coerceAtLeast(0L)
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Fade in",
-                            color = TextMuted,
-                            fontSize = 11.sp,
-                            modifier = Modifier.width(54.dp)
-                        )
-
-                        Slider(
-                            value = e.fadeInMs.coerceIn(0L, maxFadeIn).toFloat(),
-                            onValueChange = { v ->
-                                val newFadeIn = v.toLong()
-                                onEvents(events.map { current ->
-                                    if (current.id == e.id) {
-                                        current.copy(
-                                            fadeInMs = newFadeIn,
-                                            fadeOutMs = current.fadeOutMs.coerceAtMost(
-                                                (current.durationMs - newFadeIn).coerceAtLeast(0L)
-                                            )
-                                        )
-                                    } else current
-                                })
-                            },
-                            valueRange = 0f..maxFadeIn.coerceAtLeast(1L).toFloat(),
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Text(
-                            "${e.fadeInMs / 1000f}s",
-                            color = TextMain,
-                            fontSize = 10.sp,
-                            modifier = Modifier.width(36.dp)
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Fade out",
-                            color = TextMuted,
-                            fontSize = 11.sp,
-                            modifier = Modifier.width(54.dp)
-                        )
-
-                        Slider(
-                            value = e.fadeOutMs.coerceIn(0L, maxFadeOut).toFloat(),
-                            onValueChange = { v ->
-                                val newFadeOut = v.toLong()
-                                onEvents(events.map { current ->
-                                    if (current.id == e.id) {
-                                        current.copy(
-                                            fadeOutMs = newFadeOut.coerceAtMost(
-                                                (current.durationMs - current.fadeInMs).coerceAtLeast(0L)
-                                            )
-                                        )
-                                    } else current
-                                })
-                            },
-                            valueRange = 0f..maxFadeOut.coerceAtLeast(1L).toFloat(),
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Text(
-                            "${e.fadeOutMs / 1000f}s",
-                            color = TextMain,
-                            fontSize = 10.sp,
-                            modifier = Modifier.width(36.dp)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = {
-                            onEvents(events.filterNot { it.id == e.id })
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = null)
-                            Text("Remove clip")
-                        }
                     }
                 }
             }
@@ -1808,7 +1600,7 @@ fun TimelinePage(
             )
 
             Text(
-                "Each event is an independently synchronized audio clip. Set Fade Out on the outgoing clip and Fade In on the incoming clip to create an overlapping crossfade. Volume, pan and clip timing are editable per event.",
+                "Renderer uses AndroidX Media3 Composition to mix the source video and synchronized audio sequences. Crossfades between tracks are not supported by Media3 Composition; fade envelopes on individual clips are applied.",
                 color = TextMuted,
                 fontSize = 10.sp
             )
