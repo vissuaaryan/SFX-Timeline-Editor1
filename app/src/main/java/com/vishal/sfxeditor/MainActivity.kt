@@ -34,8 +34,10 @@ import com.vishal.sfxeditor.data.AudioCategoryEntity
 import com.vishal.sfxeditor.data.AudioPreviewController
 import com.vishal.sfxeditor.data.AutoAssetResolver
 import com.vishal.sfxeditor.data.LibraryManifestBuilder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 
@@ -87,6 +89,7 @@ fun SfxApp() {
     var prompt by remember { mutableStateOf("") }
     var promptPreview by remember { mutableStateOf("") }
     var promptAssetCount by remember { mutableIntStateOf(0) }
+    var generatingPrompt by remember { mutableStateOf(false) }
     var savingPrompt by remember { mutableStateOf(false) }
 
     var raw by remember { mutableStateOf("") }
